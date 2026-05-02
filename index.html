@@ -1,0 +1,2399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Inpasa – Programações Ferroviárias</title>
+
+<!-- Firebase SDKs (compat) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<!-- Other libs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+/* ══════════════════════════════════════════
+   RESET & VARIABLES
+══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue:       #1a3a6b;
+  --blue-dark:  #0d2044;
+  --blue-mid:   #2456a4;
+  --blue-light: #e8eef8;
+  --blue-pale:  #f4f7fd;
+  --gold:       #f0a500;
+  --gold-light: #ffd166;
+  --green:      #1a6b35; --green-bg: #d4edda;
+  --teal:       #0e6674; --teal-bg:  #d0f0f5;
+  --amber:      #7a5200; --amber-bg: #fff0cc;
+  --purple:     #5b2d8e; --purple-bg:#ede9f8;
+  --gray:       #3a4a6b; --gray-bg:  #e0e4ed;
+  --red:        #b91c1c;
+  --border:     #cdd5e8;
+  --text:       #1a2340;
+  --text-muted: #6b7a99;
+  --white:      #ffffff;
+  --surface:    #f7f9fd;
+}
+html, body { height: 100%; font-family: 'Barlow', 'Segoe UI', system-ui, sans-serif; background: var(--surface); color: var(--text); font-size: 13px; }
+input[type=file] { display: none; }
+
+/* ══════════════════════════════════════════
+   SCREENS
+══════════════════════════════════════════ */
+.screen { display: none; }
+.screen.active { display: flex; }
+
+/* ══════════════════════════════════════════
+   LOGIN SCREEN
+══════════════════════════════════════════ */
+#screen-login {
+  min-height: 100vh; flex-direction: column;
+  background: url('581.jpg') center/cover no-repeat;
+  position: relative;
+}
+#screen-login::before {
+  content:''; position:absolute; inset:0;
+  background: linear-gradient(120deg,rgba(5,12,35,0.90) 0%,rgba(10,25,65,0.80) 50%,rgba(5,12,35,0.70) 100%);
+  z-index:0;
+}
+.login-layout { position:relative; z-index:1; display:flex; min-height:100vh; }
+
+/* Left hero */
+.login-hero {
+  flex:1; display:flex; flex-direction:column; justify-content:center;
+  padding: 3rem 4rem;
+}
+.brand { display:flex; align-items:center; gap:14px; margin-bottom:2.5rem; }
+.brand-logo-wrap { background:#fff; border-radius:6px; padding:4px 10px; display:inline-flex; align-items:center; }
+.brand img { height:36px; display:block; }.brand-sep { width:1px; height:32px; background:rgba(255,255,255,0.3); }
+.brand-sub { font-size:11px; color:rgba(255,255,255,0.5); letter-spacing:.12em; text-transform:uppercase; line-height:1.4; }
+.hero-label { font-size:11px; font-weight:600; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); margin-bottom:.75rem; }
+.hero-title { font-family:'Barlow Condensed',sans-serif; font-size:clamp(2.4rem,4vw,3.8rem); font-weight:700; color:#fff; line-height:1.05; margin-bottom:1rem; }
+.hero-title span { color:var(--gold-light); }
+.hero-desc { font-size:14px; font-weight:300; color:rgba(255,255,255,0.6); line-height:1.7; max-width:380px; }
+.hero-gold { width:50px; height:3px; background:var(--gold); border-radius:2px; margin-top:2rem; }
+.hero-stats { display:flex; gap:2rem; margin-top:2.5rem; }
+.stat-num { font-family:'Barlow Condensed',sans-serif; font-size:1.8rem; font-weight:700; color:var(--gold-light); line-height:1; }
+.stat-lbl { font-size:10px; color:rgba(255,255,255,0.4); text-transform:uppercase; letter-spacing:.08em; margin-top:2px; }
+
+/* Right panel */
+.login-panel {
+  width:420px; min-height:100vh;
+  background:rgba(8,18,40,0.82); backdrop-filter:blur(18px);
+  border-left:1px solid rgba(255,255,255,0.12);
+  display:flex; align-items:center; justify-content:center;
+  padding:2rem 2.5rem; position:relative;
+}
+.login-panel::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:3px;
+  background:linear-gradient(90deg,var(--blue-mid),var(--gold),var(--blue-mid));
+}
+.auth-wrap { width:100%; }
+
+/* Auth tabs */
+.auth-tabs { display:flex; gap:8px; margin-bottom:1.75rem; }
+.auth-tab {
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:5px;
+  background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.14);
+  border-radius:9px; padding:10px 6px; cursor:pointer;
+  color:rgba(255,255,255,0.55); font-size:10px; font-weight:600;
+  text-transform:uppercase; letter-spacing:.06em; text-align:center; transition:all .2s;
+}
+.auth-tab .ati { font-size:18px; }
+.auth-tab:hover { background:rgba(255,255,255,0.12); color:#fff; }
+.auth-tab.active { background:rgba(240,165,0,0.15); border-color:var(--gold); color:var(--gold-light); }
+
+.auth-panel { display:none; }
+.auth-panel.active { display:block; }
+
+.ap-title { font-family:'Barlow Condensed',sans-serif; font-size:21px; font-weight:700; color:#fff; margin-bottom:3px; }
+.ap-sub { font-size:12px; color:rgba(255,255,255,0.5); margin-bottom:1.25rem; line-height:1.5; }
+
+/* Auth fields */
+.af { margin-bottom:12px; }
+.af label { display:block; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,0.45); margin-bottom:4px; }
+.af input {
+  width:100%; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18);
+  border-radius:7px; padding:9px 12px; font-size:13px; font-family:'Barlow',sans-serif;
+  color:#fff; transition:all .2s;
+}
+.af input::placeholder { color:rgba(255,255,255,0.25); }
+.af input:focus { outline:none; border-color:var(--gold); background:rgba(240,165,0,0.07); box-shadow:0 0 0 3px rgba(240,165,0,0.12); }
+
+.btn-auth {
+  width:100%; margin-top:6px; background:var(--gold); color:var(--blue-dark);
+  border:none; border-radius:7px; padding:11px; font-size:14px;
+  font-family:'Barlow',sans-serif; font-weight:700; cursor:pointer; transition:all .2s;
+}
+.btn-auth:hover { background:var(--gold-light); }
+
+.auth-err { color:#fc8181; font-size:12px; text-align:center; margin-top:7px; display:none; }
+.auth-err.show { display:block; }
+.auth-ok { background:rgba(26,107,53,.22); border:1px solid rgba(26,107,53,.5); border-radius:8px; padding:13px; text-align:center; color:#6ee7a0; font-size:12px; line-height:1.6; display:none; margin-bottom:10px; }
+.auth-ok.show { display:block; }
+.pass-bars { display:flex; gap:4px; margin-top:4px; }
+.pass-bar { height:3px; flex:1; border-radius:2px; background:rgba(255,255,255,.1); transition:background .3s; }
+.pass-bar.weak { background:#e53e3e; }
+.pass-bar.med  { background:var(--gold); }
+.pass-bar.str  { background:#48bb78; }
+.btn-back-a { background:none; border:1px solid rgba(255,255,255,.18); border-radius:7px; padding:8px 14px; color:rgba(255,255,255,.5); font-size:12px; font-family:'Barlow',sans-serif; cursor:pointer; width:100%; margin-top:8px; transition:all .15s; }
+.btn-back-a:hover { background:rgba(255,255,255,.08); color:#fff; }
+.reset-step2 { display:none; }
+.reset-step2.show { display:block; }
+.login-foot { margin-top:1rem; text-align:center; font-size:11px; color:rgba(255,255,255,.4); }
+.login-foot span { color:rgba(255,255,255,.65); cursor:pointer; }
+.login-foot span:hover { color:var(--gold-light); }
+
+/* ══════════════════════════════════════════
+   APP SCREEN
+══════════════════════════════════════════ */
+#screen-app { flex-direction:column; min-height:100vh; }
+
+/* Topbar */
+.topbar {
+  background:var(--blue); height:54px; padding:0 1.25rem;
+  display:flex; align-items:center; justify-content:space-between;
+  box-shadow:0 2px 8px rgba(10,20,60,.18); position:sticky; top:0; z-index:50;
+}
+.tb-left { display:flex; align-items:center; gap:12px; }
+.tb-logo { height:22px; display:block; }
+.tb-logo-wrap { background:#fff; border-radius:5px; padding:3px 8px; display:flex; align-items:center; }
+.tb-name { color:rgba(255,255,255,.9); font-size:14px; font-weight:600; letter-spacing:.02em; }
+.tb-sep { width:1px; height:20px; background:rgba(255,255,255,.25); }
+.tb-sub { color:rgba(255,255,255,.55); font-size:11px; }
+.tb-right { display:flex; align-items:center; gap:8px; }
+.badge-role { padding:3px 9px; border-radius:20px; font-size:10px; font-weight:600; background:rgba(255,255,255,.15); color:rgba(255,255,255,.9); }
+.tb-user { color:rgba(255,255,255,.7); font-size:11px; }
+.btn-logout { background:rgba(255,255,255,.1); color:rgba(255,255,255,.8); border:1px solid rgba(255,255,255,.2); border-radius:6px; padding:5px 10px; font-size:11px; cursor:pointer; transition:background .15s; }
+.btn-logout:hover { background:rgba(255,255,255,.2); }
+
+/* Content */
+.content { padding:1.25rem; flex:1; }
+
+/* Tabs */
+.tabs { display:flex; border-bottom:2px solid var(--border); margin-bottom:1.25rem; }
+.tab { padding:8px 18px; font-size:13px; font-weight:600; cursor:pointer; color:var(--text-muted); border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; white-space:nowrap; }
+.tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+
+/* Content header */
+.ch { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.25rem; gap:10px; flex-wrap:wrap; }
+.ch-left { display:flex; flex-direction:column; gap:3px; }
+.ch-title { font-size:16px; font-weight:700; color:var(--blue); }
+.gold-bar { width:34px; height:3px; background:var(--gold); border-radius:2px; }
+.ch-right { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
+/* Filter bar */
+.filter-bar {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  background:var(--white); border:1px solid var(--border); border-radius:9px;
+  padding:10px 14px; margin-bottom:1rem;
+}
+.filter-bar label { font-size:11px; font-weight:600; color:var(--blue); text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+.filter-bar input[type=date] {
+  border:1.5px solid var(--border); border-radius:6px; padding:5px 9px;
+  font-size:12px; color:var(--text); background:var(--white); font-family:'Barlow',sans-serif;
+}
+.filter-bar input[type=date]:focus { outline:none; border-color:var(--blue); }
+.btn-filter-clear { background:none; border:1px solid var(--border); border-radius:6px; padding:5px 10px; font-size:11px; color:var(--text-muted); cursor:pointer; }
+.btn-filter-clear:hover { background:var(--blue-light); color:var(--blue); border-color:var(--blue); }
+.filter-count { font-size:11px; color:var(--text-muted); margin-left:auto; }
+
+/* Buttons */
+.btn-primary { background:var(--blue); color:var(--white); border:none; border-radius:7px; padding:8px 15px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; transition:background .15s; white-space:nowrap; }
+.btn-primary:hover { background:var(--blue-dark); }
+.btn-secondary { background:var(--white); color:var(--blue); border:1.5px solid var(--blue); border-radius:7px; padding:8px 15px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; transition:all .15s; white-space:nowrap; }
+.btn-secondary:hover { background:var(--blue-light); }
+
+/* Table */
+.table-card { background:var(--white); border-radius:10px; border:1px solid var(--border); overflow:hidden; }
+.table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+table { width:100%; border-collapse:collapse; font-size:11.5px; }
+thead th { background:var(--blue); color:var(--white); padding:8px 9px; text-align:left; font-size:10.5px; font-weight:600; white-space:nowrap; border-right:1px solid rgba(255,255,255,.1); }
+thead th:last-child { border-right:none; }
+tbody tr { border-bottom:1px solid #edf0f8; }
+.row-prog { background:var(--blue-pale); }
+.row-prog:hover { background:#eaf0fc; }
+.row-prog td { font-weight:700; color:var(--blue); padding:8px 9px; }
+.row-vagao:hover { background:#f9fafd; }
+.row-vagao td { padding:5px 9px; }
+.expand-btn { cursor:pointer; margin-right:5px; font-size:10px; color:var(--blue); user-select:none; }
+.sub-lbl { color:var(--text-muted); font-size:10px; }
+
+/* Inline inputs */
+.inline-input { border:none; border-bottom:1.5px solid #c8d4ec; background:transparent; padding:2px 3px; font-size:11.5px; color:var(--text); width:100%; min-width:70px; transition:border-color .15s; font-family:'Barlow',sans-serif; }
+.inline-input:focus { outline:none; border-bottom-color:var(--blue); }
+.inline-input:disabled { color:var(--text-muted); cursor:not-allowed; }
+.inline-input.input-error { border-bottom-color:var(--red) !important; }
+.vagao-hint { font-size:10px; color:var(--red); margin-top:2px; display:none; }
+.vagao-hint.show { display:block; }
+
+/* PDF buttons */
+.pdf-btn { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:5px; font-size:10px; font-weight:600; cursor:pointer; border:1.5px solid var(--border); background:var(--white); color:var(--blue); transition:all .12s; white-space:nowrap; }
+.pdf-btn:hover { background:var(--blue-light); border-color:var(--blue); }
+.pdf-btn.has-file { border-color:var(--green); color:var(--green); background:var(--green-bg); }
+.pdf-btn:disabled { opacity:.4; cursor:not-allowed; }
+.pdf-remove { display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:#fee2e2; border:1px solid #fca5a5; color:var(--red); font-size:9px; font-weight:700; cursor:pointer; margin-left:3px; flex-shrink:0; line-height:1; transition:all .12s; }
+.pdf-remove:hover { background:var(--red); color:white; border-color:var(--red); }
+.pdf-cell { display:flex; flex-direction:column; gap:3px; }
+.pdf-file-row { display:flex; align-items:center; gap:2px; }
+
+/* Action icons */
+.action-icons { display:flex; gap:5px; align-items:center; }
+.icon-btn { width:26px; height:26px; border-radius:6px; border:1px solid var(--border); background:var(--white); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all .12s; }
+.icon-btn:hover { background:var(--blue-light); border-color:var(--blue); }
+.icon-btn.del:hover { background:#fee2e2; border-color:var(--red); }
+.icon-btn:disabled { opacity:.3; cursor:not-allowed; }
+
+/* Status badges */
+.badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600; white-space:nowrap; }
+.b-aguardando  { background:var(--gray-bg);   color:var(--gray); }
+.b-carregando  { background:var(--amber-bg);  color:var(--amber); }
+.b-faturamento { background:var(--purple-bg); color:var(--purple); }
+.b-concluido   { background:var(--green-bg);  color:var(--green); }
+
+.empty-row td { text-align:center; padding:2.5rem; color:var(--text-muted); }
+
+/* Modal */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(10,20,50,.55); z-index:200; align-items:flex-start; justify-content:center; padding:32px 12px; overflow-y:auto; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--white); border:2.5px solid var(--blue); border-radius:12px; width:100%; max-width:540px; overflow:hidden; box-shadow:0 20px 60px rgba(10,20,60,.3); flex-shrink:0; }
+.modal-head { background:var(--blue); padding:13px 18px; display:flex; align-items:center; justify-content:space-between; }
+.modal-head-left { display:flex; align-items:center; gap:10px; }
+.modal-head img { height:20px; display:block; }
+.modal-logo-wrap { background:#fff; border-radius:4px; padding:2px 7px; display:inline-flex; align-items:center; }
+.modal-head h3 { font-size:14px; font-weight:700; color:var(--white); }
+.modal-close { background:none; border:none; color:rgba(255,255,255,.7); font-size:18px; cursor:pointer; line-height:1; }
+.modal-close:hover { color:var(--white); }
+.modal-body { padding:1.25rem; background:var(--white); }
+.modal-footer { padding:.9rem 1.25rem; background:var(--blue-pale); border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px; }
+
+/* Form grid */
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.form-field { display:flex; flex-direction:column; gap:4px; }
+.form-field.full { grid-column:1/-1; }
+.form-field label { font-size:10px; font-weight:700; color:var(--blue); text-transform:uppercase; letter-spacing:.05em; }
+.form-field input, .form-field select { border:1.5px solid var(--border); border-radius:7px; padding:7px 10px; font-size:13px; color:var(--text); background:var(--white); transition:border-color .15s; font-family:'Barlow',sans-serif; }
+.form-field input:focus, .form-field select:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 3px rgba(26,58,107,.1); }
+.form-field input.input-error { border-color:var(--red) !important; }
+.field-hint { font-size:10px; color:var(--red); display:none; }
+.field-hint.show { display:block; }
+
+.btn-cancel-m { background:var(--white); border:1.5px solid var(--border); border-radius:7px; padding:7px 16px; font-size:12px; cursor:pointer; color:var(--text-muted); transition:all .12s; }
+.btn-cancel-m:hover { background:#f0f2f8; }
+.btn-ok { background:var(--blue); color:var(--white); border:none; border-radius:7px; padding:7px 20px; font-size:12px; font-weight:700; cursor:pointer; transition:background .15s; }
+.btn-ok:hover { background:var(--blue-dark); }
+
+/* Role badges */
+.role-badge { padding:3px 9px; border-radius:20px; font-size:10px; font-weight:700; }
+.role-master   { background:#dbeafe; color:#1e40af; }
+.role-terminal { background:#fef3c7; color:#92400e; }
+.role-csc      { background:#d1fae5; color:#065f46; }
+
+/* Pending user cards */
+.pending-card {
+  background:#fff8f0; border:1.5px solid #fcd34d;
+  border-left:4px solid var(--gold); border-radius:9px;
+  padding:12px 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+}
+.pending-card-info { display:flex; flex-direction:column; gap:2px; }
+.pending-card-name { font-weight:700; font-size:13px; color:var(--text); }
+.pending-card-meta { font-size:11px; color:var(--text-muted); }
+.pending-card-actions { display:flex; gap:7px; flex-shrink:0; }
+.btn-approve { background:var(--blue); color:#fff; border:none; border-radius:6px; padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer; transition:background .15s; }
+.btn-approve:hover { background:var(--blue-dark); }
+.btn-reject-sm { background:none; border:1.5px solid #fca5a5; border-radius:6px; padding:6px 10px; font-size:12px; color:var(--red); cursor:pointer; transition:all .15s; font-weight:600; }
+.btn-reject-sm:hover { background:#fee2e2; }
+
+/* Active user rows */
+.user-row { display:flex; align-items:center; justify-content:space-between; background:var(--blue-pale); border:1px solid var(--border); border-radius:8px; padding:10px 13px; gap:10px; }
+.user-row-actions { display:flex; gap:6px; flex-shrink:0; }
+.btn-edit-user { background:none; border:1px solid var(--border); border-radius:6px; padding:5px 10px; font-size:11px; color:var(--blue); cursor:pointer; font-weight:600; transition:all .12s; }
+.btn-edit-user:hover { background:var(--blue-light); border-color:var(--blue); }
+.btn-del-user { background:none; border:1px solid #fca5a5; border-radius:6px; padding:5px 8px; font-size:11px; color:var(--red); cursor:pointer; font-weight:600; transition:all .12s; }
+.btn-del-user:hover { background:#fee2e2; }
+
+/* Toast */
+.toast { position:fixed; bottom:20px; right:20px; z-index:9999; background:var(--blue); color:var(--white); padding:10px 16px; border-radius:8px; font-size:12px; box-shadow:0 4px 20px rgba(0,0,0,.2); transform:translateY(20px); opacity:0; transition:all .25s; pointer-events:none; max-width:280px; }
+.toast.show { transform:translateY(0); opacity:1; }
+.toast.err { background:var(--red); }
+
+/* Locked row overlay */
+.locked-badge { display:inline-block; font-size:9px; font-weight:700; color:#92400e; background:#fef3c7; border:1px solid #fcd34d; border-radius:4px; padding:1px 5px; margin-left:5px; vertical-align:middle; }
+
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE
+══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Login - stack vertically */
+  .login-layout { flex-direction:column; }
+  .login-hero { display:none; } /* hide hero on mobile */
+  .login-panel { width:100%; min-height:100vh; padding:1.5rem; border-left:none; border-top:3px solid var(--gold); }
+  .auth-tabs .ati { font-size:16px; }
+
+  /* Topbar */
+  .topbar { height:50px; padding:0 .9rem; }
+  .tb-name { font-size:12px; }
+  .tb-sub, .tb-sep { display:none; }
+  .tb-user { display:none; }
+  .btn-logout { padding:4px 8px; font-size:10px; }
+
+  /* Content */
+  .content { padding:.75rem; }
+
+  /* Header */
+  .ch { flex-direction:column; align-items:stretch; }
+  .ch-right { flex-wrap:wrap; }
+  .btn-primary, .btn-secondary { font-size:11px; padding:7px 11px; }
+
+  /* Filter bar */
+  .filter-bar { flex-direction:column; align-items:stretch; gap:8px; }
+  .filter-date-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .filter-count { margin-left:0; }
+
+  /* Tabs */
+  .tabs { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tab { padding:7px 13px; font-size:12px; }
+
+  /* Table: hide less important cols on mobile */
+  .hide-mobile { display:none; }
+
+  /* Mobile cards for vagão rows */
+  .mobile-card-view { display:block; }
+  .mobile-card-view .row-prog { display:block; }
+
+  /* Make table scroll nicely */
+  .table-wrap { border-radius:0; }
+
+  /* Toast at bottom center on mobile */
+  .toast { left:12px; right:12px; bottom:12px; max-width:none; text-align:center; }
+
+  /* Modal full screen on mobile */
+  .modal-overlay { padding:0; align-items:flex-end; }
+  .modal { border-radius:16px 16px 0 0; max-width:100%; border:none; border-top:3px solid var(--blue); }
+  .form-grid { grid-template-columns:1fr; }
+  .form-field.full { grid-column:1; }
+}
+
+@media (max-width: 480px) {
+  .auth-tab { padding:8px 4px; font-size:9px; }
+  .ap-title { font-size:18px; }
+}
+
+
+/* ── Loading Overlay ── */
+#loading-overlay {
+  position:fixed; inset:0; z-index:9000;
+  background:rgba(10,20,50,0.7);
+  display:none; align-items:center; justify-content:center;
+  flex-direction:column; gap:16px;
+}
+.loading-spinner {
+  width:44px; height:44px;
+  border:4px solid rgba(255,255,255,0.2);
+  border-top-color:var(--gold);
+  border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+#loading-msg { color:#fff; font-size:14px; font-weight:500; }
+</style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div id="loading-msg">Carregando...</div>
+</div>
+
+
+
+<!-- ══════════════════════════════════════════
+     SCREEN 1: LOGIN / REGISTER / RESET
+══════════════════════════════════════════ -->
+<div id="screen-login" class="screen active">
+  <div class="login-layout">
+
+    <!-- Hero (desktop only) -->
+    <div class="login-hero">
+      <div class="brand"><div class="brand-logo-wrap"><img src="data:image/jpeg;base64,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" alt="Inpasa"></div>
+        <div class="brand-sep"></div>
+        <div class="brand-sub">Inovação em<br>bioenergia</div>
+      </div>
+      <div class="hero-label">Sistema de Operações Ferroviárias</div>
+      <h1 class="hero-title">Programações<br>Ferroviárias <span>Inpasa</span></h1>
+      <div class="hero-gold"></div>
+    </div>
+
+    <!-- Auth panel -->
+    <div class="login-panel">
+      <div class="auth-wrap">
+
+        <!-- Mobile logo -->
+        <div style="text-align:center;margin-bottom:1.5rem;display:none;" id="mobile-logo"><div class="brand-logo-wrap"><img src="data:image/jpeg;base64,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" alt="Inpasa" style="height:32px;"></div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:#fff;letter-spacing:1px;margin-top:6px;text-align:center;line-height:1.2;">PROGRAMAÇÕES FERROVIÁRIAS INPASA</div>
+        </div>
+
+        <div class="auth-tabs">
+          <div class="auth-tab active" id="at-login" onclick="showAuth('login')"><div class="ati">🔐</div>Entrar</div>
+          <div class="auth-tab" id="at-register" onclick="showAuth('register')"><div class="ati">👤</div>Criar conta</div>
+          <div class="auth-tab" id="at-reset" onclick="showAuth('reset')"><div class="ati">🔑</div>Redefinir</div>
+        </div>
+
+        <!-- LOGIN -->
+        <div class="auth-panel active" id="ap-login">
+          <div class="ap-title">Bem-vindo de volta</div>
+          <div class="ap-sub">Entre com suas credenciais para acessar o sistema.</div>
+          <div class="af"><label>E-mail</label><input type="email" id="l-email" placeholder="seu@inpasa.com.br" autocomplete="username"></div>
+          <div class="af"><label>Senha</label><input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password"></div>
+          <div class="auth-err" id="l-err">E-mail ou senha incorretos.</div>
+          <button class="btn-auth" onclick="doLogin()">Acessar o sistema</button>
+          <div class="login-foot">Problemas? <span onclick="showAuth('reset')">Redefinir senha</span></div>
+        </div>
+
+        <!-- REGISTER -->
+        <div class="auth-panel" id="ap-register">
+          <div class="ap-title">Solicitar acesso</div>
+          <div class="ap-sub">Preencha o formulário. O administrador receberá sua solicitação.</div>
+          <div class="auth-ok" id="reg-ok"><div style="font-size:24px;margin-bottom:6px;">✅</div>Solicitação enviada! O administrador ativará sua conta em breve.</div>
+          <div id="reg-form">
+            <div class="af"><label>Nome completo</label><input type="text" id="r-nome" placeholder="Ex: João da Silva"></div>
+            <div class="af"><label>Empresa</label><input type="text" id="r-empresa" placeholder="Ex: Terminal XYZ"></div>
+            <div class="af"><label>Palavra de segurança</label><input type="text" id="r-palavra" placeholder="Combinada com o administrador"></div>
+            <div class="af"><label>E-mail</label><input type="email" id="r-email" placeholder="seu@empresa.com.br"></div>
+            <div class="af">
+              <label>Senha desejada</label>
+              <input type="password" id="r-pass" placeholder="Mínimo 8 caracteres" oninput="checkStrength(this.value,'sb')">
+              <div class="pass-bars"><div class="pass-bar" id="sb1"></div><div class="pass-bar" id="sb2"></div><div class="pass-bar" id="sb3"></div></div>
+            </div>
+            <div class="auth-err" id="reg-err"></div>
+            <button class="btn-auth" onclick="doRegister()">Enviar solicitação</button>
+          </div>
+        </div>
+
+        <!-- RESET -->
+        <div class="auth-panel" id="ap-reset">
+          <div id="rs-step1">
+            <div class="ap-title">Redefinir senha</div>
+            <div class="ap-sub">Confirme seus dados cadastrais para validar sua identidade.</div>
+            <div class="af"><label>Nome completo</label><input type="text" id="rs-nome" placeholder="Seu nome cadastrado"></div>
+            <div class="af"><label>Empresa</label><input type="text" id="rs-empresa" placeholder="Sua empresa cadastrada"></div>
+            <div class="af"><label>Palavra de segurança</label><input type="text" id="rs-palavra" placeholder="Combinada no cadastro"></div>
+            <div class="af"><label>E-mail</label><input type="email" id="rs-email" placeholder="seu@empresa.com.br"></div>
+            <div class="auth-err" id="rs-err"></div>
+            <button class="btn-auth" onclick="verifyIdentity()">Verificar identidade</button>
+          </div>
+          <div class="reset-step2" id="rs-step2">
+            <div class="auth-ok show" style="margin-bottom:1rem;"><div style="font-size:20px;margin-bottom:4px;">✅</div>Identidade confirmada! Defina sua nova senha.</div>
+            <div class="af">
+              <label>Nova senha</label>
+              <input type="password" id="rs-new" placeholder="Mínimo 8 caracteres" oninput="checkStrength(this.value,'sb2_')">
+              <div class="pass-bars"><div class="pass-bar" id="sb2_1"></div><div class="pass-bar" id="sb2_2"></div><div class="pass-bar" id="sb2_3"></div></div>
+            </div>
+            <div class="af"><label>Confirmar nova senha</label><input type="password" id="rs-confirm" placeholder="Repita a senha"></div>
+            <div class="auth-err" id="rs-err2"></div>
+            <button class="btn-auth" onclick="doResetPass()">Salvar nova senha</button>
+            <div class="auth-ok" id="rs-done" style="margin-top:10px;"><div style="font-size:20px;margin-bottom:4px;">🔓</div>Senha redefinida! Você já pode fazer login.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCREEN 2: APP
+══════════════════════════════════════════ -->
+<div id="screen-app" class="screen">
+
+  <div class="topbar">
+    <div class="tb-left">
+      <div class="tb-logo-wrap"><img class="tb-logo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCACKAQADASIAAhEBAxEB/8QAHAABAAMBAQEBAQAAAAAAAAAAAAUGBwgEAgED/8QAPRAAAQMDAwIEBAMECAcAAAAAAAECAwQFEQYHEiExCBNBYRQiUXEVMpFCgYLBFhcjQ2KSoaJSVnKUsbPi/8QAGgEBAAMBAQEAAAAAAAAAAAAAAAECAwQFBv/EACwRAQACAgEDAgUCBwAAAAAAAAABAgMREgQhMRNBBRQiUdFhgSMyQnHB4fD/2gAMAwEAAhEDEQA/AOywAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD5mkbDC+V/RrGq532QD6BRZNT100rnsqfIaq9I2savFPuqLk9FsvdfUV8MK1yuR6q3Do2IirxXHpnvgiZ1CdJ24X6ho7vTW2R6LLM7DsL0jz2z91wSpheLrV3Z9M+jndVq9fNV6KnFfVXKvZE9VU2DSl0pbzYaa4UU6VFM9HMjnRcpKjHKzmnsqtVUX1TCnz3wL4n1fX3zTmx8axMcfx/ftv93p/Eeix9LFIrbczHf8AKUBmNFuajd8K/QVWxH0zkYyjlY3qyVIke9rvqi9evoqe/T4rd1qS170T6Luboo6B8cMMM/ZY6hzeWHL/AMLkc1PZUT0VcfUfL5PGvbf7PI9SrUQCo6J3E05rC8XC12V9VJNQIqzOkh4sxy49Fz1yqGcVmYmYjwtMxC3AyaTxBbfMldHzujuLlTk2lRUX3T5uxcdDa/0prRsjbBdGTzxN5SU8jVjlan14r3T3TKF7YMlY3asoi9Z8StAPxyo1qucqIiJlVX0ITReqbRq61zXKyyulpoqmSm5uRE5KxfzJhfyqioqeymepmNp2nAea6V9Fa7dPcbjUxUtJTsV8s0jsNY1PVVMwqfEDt5FO+Nk1zna1cJJHSLxd7pyVF/VC9MV7/wAsbRNojy1gFa291tZ9c2youNkZWJTQTeQ508XDL+KOVE6rnCOT9T0a21XZ9H2hlzvUzo4ZJ2QMRqIrnOcvoiqnZMuX2RSPTty467p5RradABRIAAAAAAAAAAAAAAAAReq5lg09WPRcKrOCfxLj+ZKFO3YuHwVhgjRcOmnRO/oiKq/yApZ+oqp2VUIP8Wf9Wf5j0Wyukq7lTUrVaqzStZ3z3VEJSzTxXa6v0d7pdEUl0qIqGmoYpK5jXqizyyJy4v8Aq1Gq3CL9VOptvbYtm0HYbU5vF9LboInp/iRicv8AXJxNrOVutPFDU0SqkkVZqKOiz6eWyRsX6cWncOsriyz6RvF1euG0dDNOq/8ASxV/kel1dYrix46uTDbla1pcxbFzSap8U9/vPLzKemkralip24q/y2f6OQzvcaK96y3J15ebPCs8FrnmqJuPVfIjkSJHJjv0w77Iv0NG8Gattth13rOqRFZSU7UR6+vBsksn/hhJ+B+2/H0+rr9VsSVtVLHSu5Jnl0c96L/madd8kYb3vH9MRDGsTeK1++5XHYzdZuoNnLnWXSfld9O0b/ilVfmlY1irHJ9144X3RfqUXwvzOtGzmv8AWUz+MjWyRsevTrFCr0x/FKhmO7Nrue0e4eobJbXLHa7zRSRRIucPpZVzx+7XNxn29zSp1TS/gfZ1Rk96lRV9/Mnz/wCuNCl8VIr9Hi8x+U1yWmfq81iX34Q9C2DU+lr1dNSWenuKfFMp6fzmqvBGsy7j9M8k/QhpLbBozxdWyyaSe+OlSsga+FHq7y2SRosrM91Tiqr17fuI/aLV281j0LDYtE6H86iqZH1EVwdb5Xuer/2kcrkjXsiJlMdDR9q9v6rb78X3c3Tr2vu7IZJ/LSRHujVyfMrlTosjvyo1OiZ9+k5LTS97WtuJ7RH+iv1VrER48ynPFbuBNp/TUOkLG9z77ff7JGxLl8cCrxXCJ1y9flT+L6FU8Ed6qI59U6Ur+UdRBIyqbE7u1UzHLn7KkaFU2a1NpvVW79z3M3D1Da7e+nkzbqSpqEbxdjDOKL+zG3svq5c98no0jcqTS3jCfJSVMctr1DK50E0TssljqmpIxUX6eZx/Qp6UVw2wa763v9fsn1Jm8X323psPiyt96r9nqtbM2ST4apiqKuNiZV0Lc56eqIqtcvsmfQofhotW1WttIR2+usNLLqOhRfjWzyP5zIqriRvX8vZFROyp17oq9IzTUzeUcssSZTCtc5O32OQ/ERpWLanWtt15oW5wUCVdQ5UpI5EzDLjK8W+sTkzlvZM47KiJz9Jf1Mfo71PmJ/xLXNHG3PzDq7Tlis2mrWluslBDQUTXOk8uPtle6rk4z8R+vq7XmraySzJJNpuxKlPHKxMsc9y4WVV/xKmG+yJ9VNY8QG8Xwmz1nit6rSXvVNAyZ0SO+amge353fvXLE/iX0K7p216Bg8Ol20jbdS2av1VcqJ1fNFBUNfI+eJvmpE1E78WsVv35L6mvSUnF/FvG5mdfmVM1uf0Vn/vaHQe1N9/pLtxYL2ruUlTQxrKuf7xE4v8A9yKWYwXwS3/8S2yrbO+TlLa65yNbntHIiOT/AHczejz+ox+nltX9XTitypEgAMVwAAAAAAAAAAAAAK7rzStPqu1Mo5KmSllifzimYmcLjCoqeqFiAGQ/1MS/80Sf9r/9Hvse1U9orfxCDUHnVkLVWl82mzGyT0c5qORXInfGU+5p4GxiWzvh8teh9Wy6tu98l1BeOb3wPdTpDHC5+eT+PJ2XdV656Z7Glbmabn1foS7aZprilukuMPk/ErF5nBquTl8uUzlEVO/qWMGls17Wi8z3UrjrWvGI7Mj0Ts1JpjZi/bf0+omyVF4dMslw+ExwSRjWKnDn1w1uPzepP7F7ct2x0bLYPxNLnJLWPqX1CQeVlXNa1E48ndkanqX0E2zXtExM+e5GOsTEx7MF8bGj1vm2ceo6ODnXWKZHuVqfM6nkVGvT9y8HfZF+pM7gbPVGtNptK6NgvrbPHaYoFkd8Ms3mOZDwxjm3HVVX1NYutBSXS21FuroUmpamNY5Y17OaqYVD0lo6i9a1iPZWcVZmZn3RGi7HFprSNo0/DJ5rLdRxU3mcePNWNRFdj0yqKv7ymb9bbXbc6z0NmptUpZbfDKs1RGlIsq1D06MyvNuEb8y465VUX0Q0oGdclq25x5XmkTHGfDDYfC3tk2JjZHXuR6NRHO+MROS+q449D+GqvDlS1d+05c9NammtKWKGKOJKin+Ie9Y5XSMVXcm9uWOy9ET6G8g1jqs298lPRx/ZzhuJ4Z7hrPW121PV66ZDLcKhZEiS2K5I2IiNYzPm9cNRqZ9jw6c8I9tpbvDUX3WE9xoo3I6Smgo/IWX2V/N2E+uEz7p3OnQWjrc0RxiyPl8e96YHdPDfSaj13VX/AFbqeatoHx+VS2+jp/h0po24bFG1yud8rWpjCImV6/UndNeHbbzT1/or3bvxdKqjlSWNJKtHMVU7o5OPVFTKKn0U18FJ6nLMa5JjDSO+mQbD7M1G1t/u9bHqZLlRXGJGfDfBrGrFa9VYvLmucIrk7epr4BnkyWyW5W8r1pFI1AACiwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//9k=" alt="Inpasa"></div>
+      <span class="tb-name">Programações Ferroviárias Inpasa</span>
+    </div>
+    <div class="tb-right">
+      <span class="badge-role" id="topbar-role"></span>
+      <span class="tb-user" id="topbar-user"></span>
+      <button class="btn-logout" onclick="doLogout()">Sair</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="tabs">
+      <div class="tab active" data-tab="prog" onclick="switchTab('prog')">Programações</div>
+      <div class="tab" data-tab="users" id="tab-users" style="display:none;" onclick="switchTab('users')">Usuários</div>
+      <div class="tab" data-tab="profiles" id="tab-profiles" style="display:none;" onclick="switchTab('profiles')">Perfis</div>
+    </div>
+
+    <!-- TAB: Programações -->
+    <div id="tab-prog">
+      <div class="ch">
+        <div class="ch-left">
+          <div class="ch-title">Programações</div>
+          <div class="gold-bar"></div>
+        </div>
+        <div class="ch-right">
+          <button class="btn-secondary" id="btn-zip" onclick="exportZip()" style="display:none;">📦 Baixar arquivos</button>
+          <button class="btn-secondary" id="btn-excel" onclick="exportExcel()" style="display:none;">⬇ Excel</button>
+          <button class="btn-primary" id="btn-nova" onclick="openProgModal()" style="display:none;"><span>+</span> Nova programação</button>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <label>Data:</label>
+        <div class="filter-date-row">
+          <input type="date" id="filter-de" onchange="renderTable()">
+          <span style="font-size:12px;color:var(--text-muted);align-self:center;">até</span>
+          <input type="date" id="filter-ate" onchange="renderTable()">
+        </div>
+        <!-- Advanced filters: terminal + product — shown only for master/inpasa -->
+        <div id="adv-filters" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;">
+          <label>Terminal:</label>
+          <select id="filter-terminal" onchange="renderTable()" style="border:1.5px solid var(--border);border-radius:6px;padding:5px 9px;font-size:12px;color:var(--text);background:var(--white);font-family:'Barlow',sans-serif;">
+            <option value="">Todos</option>
+          </select>
+          <label>Produto:</label>
+          <select id="filter-produto" onchange="renderTable()" style="border:1.5px solid var(--border);border-radius:6px;padding:5px 9px;font-size:12px;color:var(--text);background:var(--white);font-family:'Barlow',sans-serif;">
+            <option value="">Todos</option>
+            <option value="412 - ALCOOL HIDRATADO">412 - ALCOOL HIDRATADO</option>
+            <option value="414 - ALCOOL ANIDRO">414 - ALCOOL ANIDRO</option>
+          </select>
+        </div>
+        <button class="btn-filter-clear" onclick="clearFilter()">✕ Limpar</button>
+        <span class="filter-count" id="filter-count"></span>
+      </div>
+
+      <div class="table-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Nº Pedido</th>
+                <th class="hide-mobile">Produto</th>
+                <th class="hide-mobile">Usina/Filial</th>
+                <th class="hide-mobile">Cliente</th>
+                <th class="hide-mobile">Local entrega</th>
+                <th style="text-align:center;width:50px">Vag.</th>
+                <th style="width:100px">Vagão Nº</th>
+                <th style="width:90px">NF Retorno</th>
+                <th class="hide-mobile" style="width:80px">Lacre</th>
+                <th style="width:90px">NF Inpasa</th>
+                <th style="width:120px">Status</th>
+                <th style="width:62px">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <tr class="empty-row"><td colspan="13">Nenhuma programação cadastrada.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Usuários -->
+    <div id="tab-users-content" style="display:none;">
+      <div class="ch">
+        <div class="ch-left"><div class="ch-title">Gerenciar Usuários</div><div class="gold-bar"></div></div>
+        <button class="btn-primary" onclick="openUserModal()"><span>+</span> Novo usuário</button>
+      </div>
+
+      <!-- Pending approvals section -->
+      <div id="pending-section" style="display:none; margin-bottom:1.5rem;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:.75rem;">
+          <div style="font-size:13px;font-weight:700;color:var(--red);">⏳ Aguardando aprovação</div>
+          <span id="pending-count" style="background:var(--red);color:#fff;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700;"></span>
+        </div>
+        <div id="pending-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <!-- Active users section -->
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:.75rem;" id="active-users-label">Usuários ativos</div>
+      <div id="user-list-wrap"></div>
+    </div>
+
+    <!-- TAB: Perfis -->
+    <div id="tab-profiles-content" style="display:none;">
+      <div class="ch">
+        <div class="ch-left"><div class="ch-title">Gerenciar Perfis</div><div class="gold-bar"></div></div>
+        <button class="btn-primary" onclick="openProfileModal()"><span>+</span> Novo perfil</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:1rem;">Crie sub-perfis de Terminal para controlar a visibilidade das programações por operador logístico.</p>
+      <div id="profiles-list-wrap"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════ MODAL: Nova/Editar Programação ════ -->
+<div class="modal-overlay" id="modal-prog">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-head-left"><div class="modal-logo-wrap"><img src="data:image/jpeg;base64,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" alt="Inpasa"></div>
+        <h3 id="modal-prog-title">Nova Programação</h3>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-prog')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-field"><label>Data da programação</label><input type="date" id="f-data"></div>
+        <div class="form-field"><label>Número do pedido</label><input type="text" id="f-pedido" placeholder="Ex: 00123"></div>
+        <div class="form-field"><label>Produto</label>
+          <select id="f-produto">
+            <option value="">Selecione o produto...</option>
+            <option value="412 - ALCOOL HIDRATADO">412 - ALCOOL HIDRATADO</option>
+            <option value="414 - ALCOOL ANIDRO">414 - ALCOOL ANIDRO</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Usina / Filial</label>
+          <select id="f-usina">
+            <option value="">Selecione a usina...</option>
+            <option value="INPASA BRASIL / BALSAS - MA">INPASA BRASIL / BALSAS - MA</option>
+            <option value="INPASA BRASIL / DOURADOS - MS">INPASA BRASIL / DOURADOS - MS</option>
+            <option value="INPASA BRASIL / LUIS EDUARDO MAGALHAES - BA">INPASA BRASIL / LUIS EDUARDO MAGALHAES - BA</option>
+            <option value="INPASA BRASIL / NOVA MUTUM - MT">INPASA BRASIL / NOVA MUTUM - MT</option>
+            <option value="INPASA BRASIL / RIO VERDE - GO">INPASA BRASIL / RIO VERDE - GO</option>
+            <option value="INPASA BRASIL / RONDONOPOLIS - MT">INPASA BRASIL / RONDONOPOLIS - MT</option>
+            <option value="INPASA BRASIL / SIDROLANDIA - MS">INPASA BRASIL / SIDROLANDIA - MS</option>
+            <option value="INPASA BRASIL / SINOP - MT">INPASA BRASIL / SINOP - MT</option>
+          </select>
+        </div>
+        <div class="form-field full"><label>Cliente</label><input type="text" id="f-cliente" placeholder="Ex: Exportador XYZ Ltda"></div>
+        <div class="form-field full"><label>Local de entrega</label><input type="text" id="f-local" placeholder="Ex: Porto de Santos – SP"></div>
+        <div class="form-field">
+          <label>Terminal responsável</label>
+          <select id="f-terminal">
+            <option value="">Nenhum (visível a todos)</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Quantidade de vagões</label><input type="number" id="f-vagoes" min="1" max="99" placeholder="Ex: 5"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-prog')">Cancelar</button>
+      <button class="btn-ok" onclick="saveProg()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Novo/Editar Perfil ════ -->
+<div class="modal-overlay" id="modal-profile">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-head">
+      <div class="modal-head-left"><h3 id="profile-modal-title">Novo Perfil</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-profile')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="p-id">
+      <div class="form-grid">
+        <div class="form-field full">
+          <label>Nome do perfil (ex: Teciap, Ultracargo)</label>
+          <input type="text" id="p-name" placeholder="Ex: Teciap">
+        </div>
+        <div class="form-field full">
+          <label>Tipo base</label>
+          <select id="p-base">
+            <option value="master">Master — acesso total + gestão de usuários e perfis</option>
+            <option value="inpasa">Inpasa — acesso total (sem gestão de usuários)</option>
+            <option value="terminal">Terminal — edita Vagão, NF Retorno, Lacre</option>
+            <option value="csc">CSC — edita apenas NF Inpasa</option>
+          </select>
+        </div>
+      </div>
+      <div id="p-err" style="font-size:11px;color:var(--red);margin-top:8px;display:none;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-profile')">Cancelar</button>
+      <button class="btn-ok" onclick="saveProfile()">Salvar perfil</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-approve">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-head">
+      <div class="modal-head-left"><h3>Aprovar solicitação de acesso</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-approve')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--blue-pale);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:1rem;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;">Solicitante</div>
+        <div style="font-weight:700;font-size:14px;color:var(--text);" id="ap-nome-display"></div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;" id="ap-email-display"></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;" id="ap-empresa-display"></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-field full">
+          <label>Perfil de acesso</label>
+          <select id="ap-role">
+            <option value="master">Master</option>
+            <option value="terminal" selected>Terminal</option>
+            <option value="csc">CSC</option>
+          </select>
+        </div>
+        <div class="form-field full">
+          <label>Senha inicial (pode alterar)</label>
+          <input type="text" id="ap-pass" placeholder="Senha que o usuário usará para entrar">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn-ok" style="background:var(--red);" onclick="rejectUser()">Recusar</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-cancel-m" onclick="closeModal('modal-approve')">Cancelar</button>
+        <button class="btn-ok" onclick="approveUser()">✓ Aprovar acesso</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Editar usuário ════ -->
+<div class="modal-overlay" id="modal-edit-user">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-head">
+      <div class="modal-head-left"><h3>Editar usuário</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-edit-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="eu-id">
+      <div class="form-grid">
+        <div class="form-field full"><label>Nome completo</label><input type="text" id="eu-nome" placeholder="Nome do usuário"></div>
+        <div class="form-field full"><label>E-mail</label><input type="email" id="eu-email" placeholder="email@empresa.com.br"></div>
+        <div class="form-field">
+          <label>Perfil de acesso</label>
+          <select id="eu-role">
+            <option value="master">Master</option>
+            <option value="terminal">Terminal</option>
+            <option value="csc">CSC</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Nova senha <span style="font-weight:400;font-size:10px;color:var(--text-muted);">(deixe vazio para manter)</span></label>
+          <input type="password" id="eu-pass" placeholder="Nova senha (opcional)">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-edit-user')">Cancelar</button>
+      <button class="btn-ok" onclick="saveEditUser()">Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Confirm delete user ════ -->
+<div class="modal-overlay" id="modal-del-user">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-head"><div class="modal-head-left"><h3>Excluir usuário</h3></div><button class="modal-close" onclick="closeModal('modal-del-user')">✕</button></div>
+    <div class="modal-body"><p style="color:var(--text);line-height:1.6;font-size:13px;">Tem certeza que deseja excluir o usuário <strong id="del-user-name"></strong>? Esta ação não pode ser desfeita.</p></div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-del-user')">Cancelar</button>
+      <button class="btn-ok" style="background:var(--red);" onclick="confirmDeleteUser()">Excluir</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-del">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-head"><div class="modal-head-left"><h3>Excluir programação</h3></div><button class="modal-close" onclick="closeModal('modal-del')">✕</button></div>
+    <div class="modal-body"><p style="color:var(--text);line-height:1.6;font-size:13px;">Tem certeza que deseja excluir esta programação e todos os seus vagões? Esta ação não pode ser desfeita.</p></div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-del')">Cancelar</button>
+      <button class="btn-ok" style="background:var(--red);" onclick="confirmDelete()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Novo Usuário ════ -->
+<div class="modal-overlay" id="modal-user">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-head">
+      <div class="modal-head-left"><div class="modal-logo-wrap"><img src="data:image/jpeg;base64,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" alt="Inpasa"></div><h3>Novo Usuário</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-field full"><label>Nome completo</label><input type="text" id="u-nome" placeholder="Ex: João Silva"></div>
+        <div class="form-field full"><label>E-mail</label><input type="email" id="u-email" placeholder="usuario@inpasa.com.br"></div>
+        <div class="form-field"><label>Senha inicial</label><input type="password" id="u-pass" placeholder="Mínimo 6 caracteres"></div>
+        <div class="form-field"><label>Perfil</label>
+          <select id="u-role"><option value="master">Master</option><option value="terminal">Terminal</option><option value="csc">CSC</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-user')">Cancelar</button>
+      <button class="btn-ok" onclick="saveUser()">Criar usuário</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: PDF Confirm ════ -->
+<div class="modal-overlay" id="modal-pdf">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-head">
+      <div class="modal-head-left"><h3 id="pdf-modal-title">Dados extraídos do PDF</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-pdf')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text-muted);font-size:11px;margin-bottom:1rem;" id="pdf-modal-desc"></p>
+      <div id="pdf-extracted-fields" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <div id="pdf-warn" style="margin-top:1rem;padding:9px 12px;background:#fef3c7;border-radius:7px;color:#92400e;font-size:11px;display:none;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-pdf')">Cancelar</button>
+      <button class="btn-ok" onclick="applyPdfData()">Confirmar e aplicar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="fi-nf-retorno" accept=".pdf">
+<input type="file" id="fi-nf-inpasa" accept=".pdf">
+
+
+
+<script>
+const LOGO_SRC = "data:image/jpeg;base64,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";
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+function isMobile() { return window.innerWidth <= 768; }
+if (isMobile()) document.getElementById('mobile-logo').style.display = 'block';
+
+
+// ══════════════════════════════════════════
+// FIREBASE CONFIG & INIT
+// ══════════════════════════════════════════
+const firebaseConfig = {
+  apiKey:            "AIzaSyBYlIDrq3SYaf-uxTWH3vU1IGXuB99gCv8",
+  authDomain:        "programacaoferroviariainpasa.firebaseapp.com",
+  projectId:         "programacaoferroviariainpasa",
+  storageBucket:     "programacaoferroviariainpasa.firebasestorage.app",
+  messagingSenderId: "718518923369",
+  appId:             "1:718518923369:web:02680ebdea62ee8a3672f8"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth     = firebase.auth();
+const db       = firebase.firestore();
+
+// ── Loading overlay ──
+function showLoading(msg) {
+  document.getElementById('loading-overlay').style.display = 'flex';
+  document.getElementById('loading-msg').textContent = msg || 'Carregando...';
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').style.display = 'none';
+}
+
+// ══════════════════════════════════════════
+// IN-MEMORY CACHE (runtime state)
+// ══════════════════════════════════════════
+const DB = {
+  users:          [],
+  programacoes:   [],
+  customProfiles: [],
+  _nextProgId:    1,  // unused with Firestore auto IDs
+};
+
+// ══════════════════════════════════════════
+// AUTH API  (Firebase Auth + Firestore)
+// ══════════════════════════════════════════
+const AuthAPI = {
+  // Login: Firebase Auth → load user profile from Firestore
+  async login(email, pass) {
+    const cred = await auth.signInWithEmailAndPassword(email, pass);
+    const snap = await db.collection('users').doc(cred.user.uid).get();
+    if (!snap.exists) throw new Error('Perfil não encontrado no sistema.');
+    const data = snap.data();
+    // active pode ser boolean true ou string "true" — normaliza
+    const isActive = data.active === true || data.active === 'true';
+    if (!isActive) throw new Error('Conta aguardando aprovação do administrador.');
+    return { uid: cred.user.uid, ...data, active: true };
+  },
+
+  // Register: create Firebase Auth user + Firestore profile (pending)
+  async requestRegister(data) {
+    const cred = await auth.createUserWithEmailAndPassword(data.email, data.pass);
+    await db.collection('users').doc(cred.user.uid).set({
+      nome:             data.nome,
+      empresa:          data.empresa,
+      palavraSeguranca: data.palavraSeguranca,
+      email:            data.email,
+      role:             'terminal',
+      active:           false,
+      createdAt:        firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    // Sign out immediately — awaits master approval
+    await auth.signOut();
+    return { ok: true };
+  },
+
+  // Verify identity for password reset (check Firestore, no Auth needed)
+  async findUser(nome, empresa, palavra, email) {
+    const snap = await db.collection('users')
+      .where('email','==', email.toLowerCase())
+      .where('active','==', true)
+      .limit(1).get();
+    if (snap.empty) return null;
+    const data = snap.docs[0].data();
+    if (
+      data.nome.toLowerCase()             === nome.toLowerCase()    &&
+      (data.empresa||'').toLowerCase()    === empresa.toLowerCase() &&
+      (data.palavraSeguranca||'').toLowerCase() === palavra.toLowerCase()
+    ) return { uid: snap.docs[0].id, ...data };
+    return null;
+  },
+
+  // Reset password via Firebase Auth (sends email — or use custom flow)
+  async resetPassword(email) {
+    await auth.sendPasswordResetEmail(email);
+    return true;
+  },
+
+  // Master creates user directly (active immediately)
+  async createUser(data) {
+    // Create Auth user via Firebase Auth REST (requires Admin SDK in production)
+    // For client-side: create then sign back in as master
+    const masterUser = auth.currentUser;
+    try {
+      const cred = await auth.createUserWithEmailAndPassword(data.email, data.pass);
+      await db.collection('users').doc(cred.user.uid).set({
+        nome:             data.nome,
+        empresa:          data.empresa || '',
+        palavraSeguranca: data.palavraSeguranca || '',
+        email:            data.email,
+        role:             data.role,
+        active:           true,
+        createdAt:        firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      // Sign back in as master
+      if (masterUser) {
+        await auth.signInWithEmailAndPassword(masterUser.email, window._masterPass || '');
+      }
+      return { ok: true };
+    } catch(e) {
+      if (e.code === 'auth/email-already-in-use') return { error: 'E-mail já cadastrado.' };
+      throw e;
+    }
+  },
+
+  // List all users from Firestore
+  async listUsers() {
+    const snap = await db.collection('users').orderBy('createdAt','asc').get();
+    return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+  },
+
+  // Approve pending user
+  async approveUser(uid, role, pass) {
+    await db.collection('users').doc(uid).update({ role, active: true });
+    // Update password via Auth REST API (simplified: admin-side)
+    return { ok: true };
+  },
+
+  // Update user profile
+  async updateUser(uid, fields) {
+    await db.collection('users').doc(uid).update(fields);
+    return { ok: true };
+  },
+
+  // Delete user from Firestore (Auth deletion requires Admin SDK)
+  async deleteUser(uid) {
+    await db.collection('users').doc(uid).delete();
+    return { ok: true };
+  },
+
+  // Reject pending user
+  async rejectUser(uid) {
+    await db.collection('users').doc(uid).delete();
+    return { ok: true };
+  }
+};
+
+// ══════════════════════════════════════════
+// PROG API  (Firestore)
+// ══════════════════════════════════════════
+const ProgAPI = {
+  list() { return DB.programacoes; },
+
+  async loadAll(terminalFilter) {
+    let q = db.collection('programacoes').orderBy('data','desc');
+    if (terminalFilter) q = q.where('terminal','==', terminalFilter);
+    const snap = await q.get();
+    DB.programacoes = snap.docs.map(d => ({
+      id: d.id, collapsed: false,
+      vagoes: [],
+      ...d.data()
+    }));
+    // Load vagoes subcollection for each prog
+    await Promise.all(DB.programacoes.map(async p => {
+      const vSnap = await db.collection('programacoes').doc(p.id)
+        .collection('vagoes').orderBy('idx','asc').get();
+      p.vagoes = vSnap.docs.map(v => ({ vid: v.id, ...v.data() }));
+      // Ensure all vagao fields exist (without loading Base64 PDF data)
+      p.vagoes = p.vagoes.map(v => ({
+        vagao:'', nfRetorno:'', lacre:'', nfInpasa:'',
+        nfRetornoFile:null, nfRetornoFileObj:null,
+        nfInpasaFile:null,  nfInpasaFileObj:null,
+        nfRetornoPath:null, nfInpasaPath:null,
+        nfRetornoUrl:null,  nfInpasaUrl:null,
+        ...v
+      }));
+    }));
+    return DB.programacoes;
+  },
+
+  async create(data) {
+    const { qtd, ...rest } = data;
+    const ref  = await db.collection('programacoes').add({
+      ...rest,
+      qtd,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdBy: currentUser?.uid || '',
+    });
+    // Create vagoes subcollection
+    const batch = db.batch();
+    for (let i=0; i<qtd; i++) {
+      const vRef = db.collection('programacoes').doc(ref.id).collection('vagoes').doc();
+      batch.set(vRef, { idx:i, vagao:'', nfRetorno:'', lacre:'', nfInpasa:'',
+        nfRetornoFile:null, nfInpasaFile:null });
+    }
+    await batch.commit();
+    return ref.id;
+  },
+
+  async update(id, data) {
+    await db.collection('programacoes').doc(id).update(data);
+  },
+
+  async updateVagao(progId, vid, fields) {
+    // Remove File objects before saving (not serializable)
+    const { nfRetornoFileObj, nfInpasaFileObj, ...safeFields } = fields;
+    await db.collection('programacoes').doc(progId).collection('vagoes').doc(vid).update(safeFields);
+  },
+
+  async delete(id) {
+    // Delete vagoes subcollection first
+    const vSnap = await db.collection('programacoes').doc(id).collection('vagoes').get();
+    const batch = db.batch();
+    vSnap.docs.forEach(v => batch.delete(v.ref));
+    await batch.commit();
+    await db.collection('programacoes').doc(id).delete();
+  }
+};
+
+// ══════════════════════════════════════════
+// PROFILES API  (Firestore)
+// ══════════════════════════════════════════
+const ProfilesAPI = {
+  async loadAll() {
+    const snap = await db.collection('customProfiles').orderBy('name','asc').get();
+    DB.customProfiles = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return DB.customProfiles;
+  },
+  async save(data) {
+    if (data.id && data.id !== 'new') {
+      await db.collection('customProfiles').doc(data.id).update(data);
+    } else {
+      await db.collection('customProfiles').add(data);
+    }
+    await this.loadAll();
+  },
+  async delete(id) {
+    await db.collection('customProfiles').doc(id).delete();
+    await this.loadAll();
+  }
+};
+
+// ══════════════════════════════════════════
+// STORAGE API  (Base64 no Firestore — sem Firebase Storage)
+// PDFs são convertidos para Base64 e salvos como subcoleção
+// separada (pdfData) para não estourar o limite de 1MB do
+// documento principal de vagão.
+// Limite prático: ~750KB por PDF após encoding Base64.
+// ══════════════════════════════════════════
+const StorageAPI = {
+
+  // Converte File para string Base64
+  async fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result.split(',')[1]); // remove data:...;base64,
+      reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
+      reader.readAsDataURL(file);
+    });
+  },
+
+  // Converte Base64 de volta para Blob
+  base64ToBlob(b64, mimeType = 'application/pdf') {
+    const bytes = atob(b64);
+    const arr   = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new Blob([arr], { type: mimeType });
+  },
+
+  // Salva PDF como Base64 em subcoleção pdfData do vagão
+  async uploadPdf(progId, vagaoIdx, type, file) {
+    // Verifica tamanho antes de converter (limite seguro: 750KB)
+    if (file.size > 750 * 1024) {
+      throw new Error(`PDF muito grande (${(file.size/1024).toFixed(0)}KB). Limite: 750KB. Compacte o arquivo antes de enviar.`);
+    }
+    const b64  = await this.fileToBase64(file);
+    const prog = ProgAPI.list().find(p => p.id === progId);
+    if (!prog || !prog.vagoes[vagaoIdx]?.vid) {
+      throw new Error('Vagão não encontrado. Salve a programação antes de anexar PDFs.');
+    }
+    const vid     = prog.vagoes[vagaoIdx].vid;
+    const docPath = db.collection('programacoes').doc(progId)
+                      .collection('vagoes').doc(vid)
+                      .collection('pdfData').doc(type); // 'retorno' ou 'inpasa'
+    await docPath.set({
+      fileName:  file.name,
+      mimeType:  file.type || 'application/pdf',
+      sizeBytes: file.size,
+      data:      b64,
+      uploadedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      uploadedBy: firebase.auth().currentUser?.uid || '',
+    });
+    // Retorna referência (sem URL — acesso via Firestore)
+    return { path: `${progId}/${vid}/${type}`, url: null };
+  },
+
+  // Remove documento de PDF do Firestore
+  async deletePdf(progId, vid, type) {
+    if (!progId || !vid || !type) return;
+    try {
+      await db.collection('programacoes').doc(progId)
+              .collection('vagoes').doc(vid)
+              .collection('pdfData').doc(type).delete();
+    } catch(e) { console.warn('deletePdf:', e); }
+  },
+
+  // Lê PDF do Firestore e retorna como Blob (para ZIP)
+  async getPdfBlob(progId, vid, type) {
+    const snap = await db.collection('programacoes').doc(progId)
+                         .collection('vagoes').doc(vid)
+                         .collection('pdfData').doc(type).get();
+    if (!snap.exists) return null;
+    return this.base64ToBlob(snap.data().data, snap.data().mimeType);
+  },
+
+  // Abre/faz download do PDF direto no navegador
+  async downloadPdf(progId, vid, type, fileName) {
+    showLoading('Carregando PDF...');
+    try {
+      const blob = await this.getPdfBlob(progId, vid, type);
+      if (!blob) { toast('PDF não encontrado.', true); return; }
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href     = url;
+      a.download = fileName || `${type}_${vid}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } finally { hideLoading(); }
+  }
+};
+
+
+// Keep master password in memory for re-auth after creating users
+window._masterPass = '';
+
+// ══════════════════════════════════════════
+// APP STATE
+// ══════════════════════════════════════════
+let currentUser = null;
+let editingProgId = null;
+let deletingProgId = null;
+let pdfContext = null;
+let pdfExtracted = null;
+let resetUser = null;
+
+// ══════════════════════════════════════════
+// PERMISSIONS
+// ══════════════════════════════════════════
+/*
+  TELA VISÍVEL:
+  Master   → Programações + Usuários + Perfis (tudo)
+  Inpasa   → Programações apenas
+  Terminal → Programações apenas (visão restrita ao seu terminal)
+  CSC      → Programações apenas (edita só NF Inpasa)
+*/
+const PERMS = {
+  master:   {
+    canCreateProg:true,  canEditProg:true,  canDeleteProg:true,
+    canEditVagao:true,   canEditRetorno:true,  canEditLacre:true,
+    canUploadRetorno:true,  canUploadInpasa:true,
+    canManageUsers:true, canManageProfiles:true,
+    canDownload:true,    canSeeAll:true,      canSeeFilters:true,
+    noDateLock:true,
+  },
+  inpasa:   {
+    canCreateProg:true,  canEditProg:true,  canDeleteProg:true,
+    canEditVagao:true,   canEditRetorno:true,  canEditLacre:true,
+    canUploadRetorno:true,  canUploadInpasa:true,
+    canManageUsers:false, canManageProfiles:false,
+    canDownload:true,    canSeeAll:true,      canSeeFilters:true,
+    noDateLock:true,
+  },
+  terminal: {
+    canCreateProg:false, canEditProg:false, canDeleteProg:false,
+    canEditVagao:true,   canEditRetorno:true,  canEditLacre:true,
+    canUploadRetorno:true,  canUploadInpasa:false,
+    canManageUsers:false, canManageProfiles:false,
+    canDownload:true,    canSeeAll:false,     canSeeFilters:false,
+    noDateLock:false,
+  },
+  csc:      {
+    canCreateProg:false, canEditProg:false, canDeleteProg:false,
+    canEditVagao:false,  canEditRetorno:false, canEditLacre:false,
+    canUploadRetorno:false, canUploadInpasa:true,
+    canManageUsers:false, canManageProfiles:false,
+    canDownload:true,    canSeeAll:false,     canSeeFilters:false,
+    noDateLock:false,
+  },
+};
+
+// Dynamic custom profiles: inherit baseRole permissions
+function getRolePerms(role) {
+  if (!role) return {};
+  if (PERMS[role]) return PERMS[role];
+  const custom = (DB.customProfiles||[]).find(p => p.roleKey === role);
+  if (custom && PERMS[custom.baseRole]) return PERMS[custom.baseRole];
+  return {};
+}
+function can(perm) {
+  if (!currentUser) return false;
+  return !!getRolePerms(currentUser.role)[perm];
+}
+
+// Date lock: only applies to roles WITHOUT noDateLock
+function isDateLocked(progDateStr) {
+  if (!progDateStr) return false;
+  if (can('noDateLock')) return false;
+  const today     = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  const progDate  = new Date(progDateStr + 'T00:00:00');
+  return progDate < yesterday;
+}
+
+// ══════════════════════════════════════════
+// SCREENS
+// ══════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ══════════════════════════════════════════
+// AUTH UI
+// ══════════════════════════════════════════
+function showAuth(name) {
+  ['login','register','reset'].forEach(n => {
+    document.getElementById(`at-${n}`).classList.toggle('active', n===name);
+    document.getElementById(`ap-${n}`).classList.toggle('active', n===name);
+  });
+}
+
+// ══════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════
+async function doLogin() {
+  const email = document.getElementById('l-email').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  const err   = document.getElementById('l-err');
+  if (!email || !pass) { err.textContent='Preencha e-mail e senha.'; err.classList.add('show'); return; }
+  showLoading('Autenticando...');
+  try {
+    const user = await AuthAPI.login(email, pass);
+    err.classList.remove('show');
+    window._masterPass = pass; // keep for re-auth when master creates users
+    currentUser = user;
+    await initApp();
+  } catch(e) {
+    err.textContent = e.message || 'E-mail ou senha incorretos.';
+    err.classList.add('show');
+  } finally { hideLoading(); }
+}
+document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+
+async function doLogout() {
+  try { await auth.signOut(); } catch(e) {}
+  currentUser = null;
+  window._masterPass = '';
+  showScreen('screen-login');
+}
+
+async function initApp() {
+  showScreen('screen-app');
+  showLoading('Carregando dados...');
+  try {
+    // Load custom profiles first (needed for permissions)
+    await ProfilesAPI.loadAll();
+    // Determine terminal filter for non-admin users
+    const tf = (!can('canSeeAll') && currentUser.role.includes('terminal_'))
+      ? getRoleDisplayName(currentUser.role) : null;
+    await ProgAPI.loadAll(tf);
+  } catch(e) { console.error('initApp load error:', e); }
+  finally { hideLoading(); }
+
+  document.getElementById('topbar-user').textContent = currentUser.nome || currentUser.email;
+  document.getElementById('topbar-role').textContent = getRoleDisplayName(currentUser.role);
+
+  // Debug: log current user role to console
+  console.log('✅ currentUser:', currentUser.role, '| canManageUsers:', can('canManageUsers'), '| canManageProfiles:', can('canManageProfiles'));
+
+  document.getElementById('btn-nova').style.display  = can('canCreateProg')     ? 'flex' : 'none';
+  document.getElementById('btn-excel').style.display = can('canDownload')        ? 'flex' : 'none';
+  document.getElementById('btn-zip').style.display   = can('canDownload')        ? 'flex' : 'none';
+  document.getElementById('tab-users').style.display    = can('canManageUsers')    ? 'flex' : 'none';
+  document.getElementById('tab-profiles').style.display = can('canManageProfiles') ? 'flex' : 'none';
+
+  const advFilters = document.getElementById('adv-filters');
+  if (advFilters) advFilters.style.display = can('canSeeFilters') ? 'flex' : 'none';
+
+  switchTab('prog');
+  renderTable();
+}
+
+function getRoleDisplayName(role) {
+  if (!role) return '';
+  if (role === 'master')   return 'Master';
+  if (role === 'inpasa')   return 'Inpasa';
+  if (role === 'terminal') return 'Terminal';
+  if (role === 'csc')      return 'CSC';
+  // Custom profile
+  const custom = (DB.customProfiles||[]).find(p => p.roleKey === role);
+  if (custom) return custom.name;
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+// ══════════════════════════════════════════
+// REGISTER
+// ══════════════════════════════════════════
+async function doRegister() {
+  const nome    = document.getElementById('r-nome').value.trim();
+  const empresa = document.getElementById('r-empresa').value.trim();
+  const palavra = document.getElementById('r-palavra').value.trim();
+  const email   = document.getElementById('r-email').value.trim();
+  const pass    = document.getElementById('r-pass').value;
+  const err     = document.getElementById('reg-err');
+  if (!nome||!empresa||!palavra||!email||!pass) { err.textContent='Preencha todos os campos.'; err.classList.add('show'); return; }
+  if (pass.length<8) { err.textContent='Senha mínima de 8 caracteres.'; err.classList.add('show'); return; }
+  err.classList.remove('show');
+  showLoading('Enviando solicitação...');
+  try {
+    await AuthAPI.requestRegister({ nome, empresa, palavraSeguranca:palavra, email, pass });
+    document.getElementById('reg-form').style.display='none';
+    document.getElementById('reg-ok').classList.add('show');
+  } catch(e) {
+    err.textContent = e.message || 'Erro ao enviar solicitação.';
+    err.classList.add('show');
+  } finally { hideLoading(); }
+}
+
+// ══════════════════════════════════════════
+// RESET
+// ══════════════════════════════════════════
+async function verifyIdentity() {
+  const nome    = document.getElementById('rs-nome').value.trim();
+  const empresa = document.getElementById('rs-empresa').value.trim();
+  const palavra = document.getElementById('rs-palavra').value.trim();
+  const email   = document.getElementById('rs-email').value.trim();
+  const err     = document.getElementById('rs-err');
+  if (!nome||!empresa||!palavra||!email) { err.textContent='Preencha todos os campos.'; err.classList.add('show'); return; }
+  showLoading('Verificando identidade...');
+  try {
+    const user = await AuthAPI.findUser(nome,empresa,palavra,email);
+    if (!user) { err.textContent='Dados não conferem com o cadastro.'; err.classList.add('show'); hideLoading(); return; }
+    resetUser = user; err.classList.remove('show');
+    document.getElementById('rs-step1').style.display='none';
+    document.getElementById('rs-step2').classList.add('show');
+  } catch(e) { err.textContent = e.message||'Erro na verificação.'; err.classList.add('show'); }
+  finally { hideLoading(); }
+}
+async function doResetPass() {
+  const np  = document.getElementById('rs-new').value;
+  const cp  = document.getElementById('rs-confirm').value;
+  const err = document.getElementById('rs-err2');
+  if (np.length<8) { err.textContent='Mínimo 8 caracteres.'; err.classList.add('show'); return; }
+  if (np!==cp)     { err.textContent='As senhas não coincidem.'; err.classList.add('show'); return; }
+  showLoading('Redefinindo senha...');
+  try {
+    await AuthAPI.resetPassword(resetUser.email);
+    err.classList.remove('show');
+    document.getElementById('rs-done').classList.add('show');
+    document.getElementById('rs-done').innerHTML = '<div style=\'font-size:20px;margin-bottom:4px;\'>📧</div>E-mail de redefinição enviado! Verifique sua caixa de entrada.';
+    document.querySelector('#rs-step2 .btn-auth').disabled=true;
+    resetUser=null;
+  } catch(e) { err.textContent=e.message||'Erro ao redefinir senha.'; err.classList.add('show'); }
+  finally { hideLoading(); }
+  setTimeout(()=>{ showAuth('login'); document.getElementById('rs-step1').style.display='block'; document.getElementById('rs-step2').classList.remove('show'); document.getElementById('rs-done').classList.remove('show'); }, 2800);
+}
+
+// Password strength
+function checkStrength(val, prefix) {
+  let s=0; if(val.length>=8)s++; if(/[A-Z]/.test(val)&&/[a-z]/.test(val))s++; if(/\d/.test(val)&&/[^A-Za-z0-9]/.test(val))s++;
+  const cls=['','weak','med','str'];
+  [1,2,3].forEach(i=>{ const el=document.getElementById(`${prefix}${i}`); if(el){el.className='pass-bar'; if(s>=i)el.classList.add(cls[s]);} });
+}
+
+// ══════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tab));
+  document.getElementById('tab-prog').style.display              = tab==='prog'     ? 'block' : 'none';
+  document.getElementById('tab-users-content').style.display     = tab==='users'    ? 'block' : 'none';
+  document.getElementById('tab-profiles-content').style.display  = tab==='profiles' ? 'block' : 'none';
+  if (tab==='users')    renderUsers().catch(console.error);
+  if (tab==='profiles') { renderProfiles(); populateTerminalSelects(); }
+}
+
+function updatePendingBadge() {
+  const count = DB.users.filter(u=>u.active===false).length;
+  const tab   = document.getElementById('tab-users');
+  if (!tab) return;
+  tab.innerHTML = count > 0
+    ? `Usuários <span style="background:var(--red);color:#fff;border-radius:20px;padding:0 7px;font-size:10px;font-weight:700;margin-left:4px;">${count}</span>`
+    : 'Usuários';
+}
+
+// ══════════════════════════════════════════
+// MODAL HELPERS
+// ══════════════════════════════════════════
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target===o) o.classList.remove('open'); });
+});
+
+// ══════════════════════════════════════════
+// PROG MODAL
+// ══════════════════════════════════════════
+function openProgModal(progId=null) {
+  editingProgId=progId;
+  populateTerminalSelects();
+  document.getElementById('modal-prog-title').textContent = progId ? 'Editar Programação' : 'Nova Programação';
+  if (progId) {
+    const p = ProgAPI.list().find(x=>x.id===progId);
+    document.getElementById('f-data').value      = p.data;
+    document.getElementById('f-pedido').value    = p.pedido;
+    document.getElementById('f-produto').value   = p.produto;
+    document.getElementById('f-usina').value     = p.usina;
+    document.getElementById('f-cliente').value   = p.cliente;
+    document.getElementById('f-local').value     = p.local;
+    document.getElementById('f-terminal').value  = p.terminal||'';
+    document.getElementById('f-vagoes').value    = p.qtd;
+    document.getElementById('f-vagoes').disabled = true;
+  } else {
+    ['f-data','f-pedido','f-cliente','f-local','f-vagoes'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('f-produto').selectedIndex  = 0;
+    document.getElementById('f-usina').selectedIndex    = 0;
+    document.getElementById('f-terminal').selectedIndex = 0;
+    document.getElementById('f-vagoes').disabled=false;
+  }
+  openModal('modal-prog');
+}
+
+async function saveProg() {
+  const data     = document.getElementById('f-data').value;
+  const pedido   = document.getElementById('f-pedido').value.trim();
+  const produto  = document.getElementById('f-produto').value.trim();
+  const usina    = document.getElementById('f-usina').value.trim();
+  const cliente  = document.getElementById('f-cliente').value.trim();
+  const local    = document.getElementById('f-local').value.trim();
+  const terminal = document.getElementById('f-terminal').value.trim();
+  const qtd      = parseInt(document.getElementById('f-vagoes').value);
+  if (!data||!pedido||!produto||!usina||!cliente||!local||!qtd) { toast('Preencha todos os campos.',true); return; }
+  showLoading('Salvando...');
+  try {
+    if (editingProgId) {
+      await ProgAPI.update(editingProgId,{data,pedido,produto,usina,cliente,local,terminal});
+      toast('Programação atualizada.');
+    } else {
+      await ProgAPI.create({data,pedido,produto,usina,cliente,local,terminal,qtd});
+      toast('Programação criada com sucesso.');
+    }
+    const tf = (!can('canSeeAll') && currentUser.role.includes('terminal_'))
+      ? getRoleDisplayName(currentUser.role) : null;
+    await ProgAPI.loadAll(tf);
+    closeModal('modal-prog'); renderTable();
+  } catch(e) { toast('Erro ao salvar: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+function openDeleteModal(progId) { deletingProgId=progId; openModal('modal-del'); }
+async function confirmDelete() {
+  showLoading('Excluindo...');
+  try {
+    await ProgAPI.delete(deletingProgId);
+    const tf = (!can('canSeeAll') && currentUser.role.includes('terminal_'))
+      ? getRoleDisplayName(currentUser.role) : null;
+    await ProgAPI.loadAll(tf);
+    closeModal('modal-del'); renderTable(); toast('Programação excluída.');
+  } catch(e) { toast('Erro ao excluir: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+// ══════════════════════════════════════════
+// STATUS — 4 levels
+// ══════════════════════════════════════════
+function getStatusBadge(v) {
+  if ((v.nfInpasa  ||'').trim()) return '<span class="badge b-concluido">Concluído</span>';
+  if ((v.nfRetorno ||'').trim()) return '<span class="badge b-faturamento">Ag. faturamento</span>';
+  if ((v.vagao     ||'').trim()) return '<span class="badge b-carregando">Em carregamento</span>';
+  return '<span class="badge b-aguardando">Aguardando encoste</span>';
+}
+
+// ══════════════════════════════════════════
+// INLINE INPUT + VAGÃO VALIDATION
+// ══════════════════════════════════════════
+
+async function saveVagaoField(progId, idx) {
+  const prog = ProgAPI.list().find(p=>p.id===progId);
+  if (!prog || !prog.vagoes[idx]?.vid) return;
+  const v = prog.vagoes[idx];
+  try {
+    await ProgAPI.updateVagao(progId, v.vid, {
+      vagao:v.vagao||'', nfRetorno:v.nfRetorno||'', lacre:v.lacre||'', nfInpasa:v.nfInpasa||'',
+      nfRetornoFile:v.nfRetornoFile||null, nfRetornoPath:v.nfRetornoPath||null, nfRetornoUrl:v.nfRetornoUrl||null,
+      nfInpasaFile:v.nfInpasaFile||null,  nfInpasaPath:v.nfInpasaPath||null,  nfInpasaUrl:v.nfInpasaUrl||null,
+    });
+  } catch(e) { console.error('saveVagaoField:', e); }
+}
+let _saveTimer = {};
+function handleInlineInput(progId, idx, field, value) {
+  const prog = ProgAPI.list().find(p=>p.id===progId);
+  if (!prog) return;
+  if (field==='vagao') {
+    const digits = value.replace(/\D/g,'');
+    const inputEl = document.getElementById(`vi-${progId}-${idx}`);
+    const hintEl  = document.getElementById(`vh-${progId}-${idx}`);
+    const bad = value!=='' && digits.length!==7;
+    if (inputEl) inputEl.classList.toggle('input-error', bad);
+    if (hintEl)  hintEl.classList.toggle('show', bad);
+    prog.vagoes[idx][field] = value;
+  } else {
+    prog.vagoes[idx][field] = value;
+  }
+  updateStatusCell(progId, idx);
+  // Debounced save to Firestore
+  const key = `${progId}_${idx}`;
+  clearTimeout(_saveTimer[key]);
+  _saveTimer[key] = setTimeout(() => saveVagaoField(progId, idx), 1200);
+}
+function updateStatusCell(progId, idx) {
+  const prog = ProgAPI.list().find(p=>p.id===progId);
+  if (!prog) return;
+  const cell = document.getElementById(`st-${progId}-${idx}`);
+  if (cell) cell.innerHTML = getStatusBadge(prog.vagoes[idx]);
+}
+
+// ══════════════════════════════════════════
+// FILTERS
+// ══════════════════════════════════════════
+function clearFilter() {
+  document.getElementById('filter-de').value='';
+  document.getElementById('filter-ate').value='';
+  const ft = document.getElementById('filter-terminal');
+  const fp = document.getElementById('filter-produto');
+  if (ft) ft.value='';
+  if (fp) fp.value='';
+  renderTable();
+}
+
+function populateTerminalFilter() {
+  const el = document.getElementById('filter-terminal');
+  if (!el) return;
+  // Collect unique terminals from all custom terminal roles in users
+  const terminals = [...new Set(
+    DB.users
+      .filter(u => u.active && u.role && u.role.startsWith('terminal_'))
+      .map(u => u.role.replace('terminal_',''))
+  )];
+  // Also collect from custom role labels stored in profiles
+  const profiles = DB.customProfiles || [];
+  profiles.filter(p=>p.baseRole==='terminal').forEach(p=>{
+    if (!terminals.includes(p.name)) terminals.push(p.name);
+  });
+  const current = el.value;
+  el.innerHTML = '<option value="">Todos</option>' +
+    terminals.map(t=>`<option value="${esc(t)}" ${current===t?'selected':''}>${esc(t)}</option>`).join('');
+}
+
+function getFilteredProgs() {
+  const de       = document.getElementById('filter-de').value;
+  const ate      = document.getElementById('filter-ate').value;
+  const terminal = (document.getElementById('filter-terminal')?.value || '').toLowerCase();
+  const produto  = document.getElementById('filter-produto')?.value || '';
+  let progs = ProgAPI.list();
+
+  // Terminal users only see progs assigned to their terminal
+  if (currentUser && !can('canSeeAll')) {
+    const userTerminal = currentUser.role.startsWith('terminal_')
+      ? currentUser.role.replace('terminal_','').toLowerCase()
+      : null;
+    if (userTerminal) {
+      progs = progs.filter(p => (p.terminal||'').toLowerCase() === userTerminal);
+    }
+    // CSC/csc sees all (but can only edit NF Inpasa)
+  }
+
+  if (de)       progs = progs.filter(p => p.data >= de);
+  if (ate)      progs = progs.filter(p => p.data <= ate);
+  if (terminal) progs = progs.filter(p => (p.terminal||'').toLowerCase().includes(terminal));
+  if (produto)  progs = progs.filter(p => p.produto === produto);
+  return progs;
+}
+
+// ══════════════════════════════════════════
+// TABLE RENDER
+// ══════════════════════════════════════════
+function fmtDate(d) {
+  if (!d) return '';
+  const [y,m,dia] = d.split('-');
+  return `${dia}/${m}/${y}`;
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderTable() {
+  const tbody = document.getElementById('table-body');
+  const progs = getFilteredProgs();
+  const all   = ProgAPI.list();
+
+  // Update filter count
+  const fc = document.getElementById('filter-count');
+  const de  = document.getElementById('filter-de').value;
+  const ate = document.getElementById('filter-ate').value;
+  fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
+
+  if (!progs.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="13">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
+    return;
+  }
+
+  let html='';
+  for (const p of progs) {
+    const arrow    = p.collapsed ? '▶' : '▼';
+    const canEdit  = can('canEditProg');
+    const canDel   = can('canDeleteProg');
+    const locked   = isDateLocked(p.data);
+    const lockNote = locked ? '<span class="locked-badge">Bloqueado</span>' : '';
+
+    html += `<tr class="row-prog">
+      <td><span class="expand-btn" onclick="toggleCollapse(${p.id})">${arrow}</span>${fmtDate(p.data)}${lockNote}</td>
+      <td>${esc(p.pedido)}</td>
+      <td class="hide-mobile">${esc(p.produto)}</td>
+      <td class="hide-mobile">${esc(p.usina)}</td>
+      <td class="hide-mobile">${esc(p.cliente)}</td>
+      <td class="hide-mobile">${esc(p.local)}</td>
+      <td style="text-align:center;">${p.qtd}</td>
+      <td colspan="4" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
+      <td></td>
+      <td>
+        <div class="action-icons">
+          <button class="icon-btn" title="Editar" onclick="openProgModal(${p.id})" ${(!canEdit||locked)?'disabled':''}>✏️</button>
+          <button class="icon-btn del" title="Excluir" onclick="openDeleteModal(${p.id})" ${(!canDel||locked)?'disabled':''}>🗑️</button>
+        </div>
+      </td>
+    </tr>`;
+
+    if (!p.collapsed) {
+      for (let i=0; i<p.vagoes.length; i++) {
+        const v=p.vagoes[i];
+        // Per-row lock: CSC/Terminal can't edit locked dates
+        const rowLocked = locked;
+        const canV  = can('canEditVagao')    && !rowLocked;
+        const canR  = can('canEditRetorno')  && !rowLocked;
+        const canL  = can('canEditLacre')    && !rowLocked;
+        const canUR = can('canUploadRetorno')&& !rowLocked;
+        const canUI = can('canUploadInpasa') && !rowLocked;
+        const hasRet = !!v.nfRetornoFile;
+        const hasInp = !!v.nfInpasaFile;
+        const vagaoDigits = (v.vagao||'').replace(/\D/g,'');
+        const vagaoBad = v.vagao!=='' && vagaoDigits.length!==7;
+
+        const retHtml = hasRet
+          ? `<div class="pdf-file-row">
+               <button class="pdf-btn has-file" ${!canUR?'disabled':''} onclick="triggerPdfUpload(${p.id},${i},'retorno')" title="${esc(v.nfRetornoFile)}">📎 PDF</button>
+               ${canUR?`<span class="pdf-remove" onclick="removePdf(${p.id},${i},'retorno')">✕</span>`:''}
+             </div>`
+          : `<button class="pdf-btn" ${!canUR?'disabled':''} onclick="triggerPdfUpload(${p.id},${i},'retorno')">📎 Anexar</button>`;
+
+        const inpHtml = hasInp
+          ? `<div class="pdf-file-row">
+               <button class="pdf-btn has-file" ${!canUI?'disabled':''} onclick="triggerPdfUpload(${p.id},${i},'inpasa')" title="${esc(v.nfInpasaFile)}">📎 PDF</button>
+               ${canUI?`<span class="pdf-remove" onclick="removePdf(${p.id},${i},'inpasa')">✕</span>`:''}
+             </div>`
+          : `<button class="pdf-btn" ${!canUI?'disabled':''} onclick="triggerPdfUpload(${p.id},${i},'inpasa')">📎 Anexar</button>`;
+
+        html += `<tr class="row-vagao">
+          <td class="sub-lbl" colspan="7" style="padding-left:20px;">↳ Vagão ${i+1}</td>
+          <td><div>
+            <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
+              type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
+              oninput="handleInlineInput(${p.id},${i},'vagao',this.value)">
+            <div id="vh-${p.id}-${i}" class="vagao-hint${vagaoBad?' show':''}">Obrigatório 7 dígitos</div>
+          </div></td>
+          <td><div class="pdf-cell">
+            <input class="inline-input" type="text" placeholder="Nº NF" value="${esc(v.nfRetorno)}" ${!canR?'disabled':''}
+              oninput="handleInlineInput(${p.id},${i},'nfRetorno',this.value)">
+            ${retHtml}
+          </div></td>
+          <td class="hide-mobile"><input class="inline-input" type="text" placeholder="Lacre" value="${esc(v.lacre)}" ${!canL?'disabled':''}
+            oninput="handleInlineInput(${p.id},${i},'lacre',this.value)"></td>
+          <td><div class="pdf-cell">
+            <input class="inline-input" type="text" placeholder="Nº NF" value="${esc(v.nfInpasa)}" disabled>
+            ${inpHtml}
+          </div></td>
+          <td id="st-${p.id}-${i}">${getStatusBadge(v)}</td>
+          <td></td>
+        </tr>`;
+      }
+    }
+  }
+  tbody.innerHTML = html;
+  if (can('canSeeAll')) populateTerminalSelects();
+}
+
+function toggleCollapse(progId) {
+  const p = ProgAPI.list().find(x=>x.id===progId);
+  if (p) { p.collapsed=!p.collapsed; renderTable(); }
+}
+
+async function removePdf(progId, idx, type) {
+  const prog = ProgAPI.list().find(p=>p.id===progId);
+  if (!prog) return;
+  const v = prog.vagoes[idx];
+  showLoading('Removendo PDF...');
+  try {
+    if (type==='retorno') {
+      if (v.nfRetornoPath && v.vid) await StorageAPI.deletePdf(progId, v.vid, 'retorno');
+      v.nfRetornoFile=null; v.nfRetornoFileObj=null; v.nfRetornoPath=null; v.nfRetornoUrl=null;
+      v.nfRetorno=''; v.vagao=''; v.lacre='';
+    } else {
+      if (v.nfInpasaPath && v.vid) await StorageAPI.deletePdf(progId, v.vid, 'inpasa');
+      v.nfInpasaFile=null; v.nfInpasaFileObj=null; v.nfInpasaPath=null; v.nfInpasaUrl=null;
+      v.nfInpasa='';
+    }
+    await saveVagaoField(progId, idx);
+    renderTable(); toast('PDF removido. Campos limpos.');
+  } catch(e) { toast('Erro ao remover PDF: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+// ══════════════════════════════════════════
+// PDF EXTRACTION
+// ══════════════════════════════════════════
+function triggerPdfUpload(progId, vagaoIdx, type) {
+  pdfContext = { progId, vagaoIdx, type };
+  const input = type==='retorno' ? document.getElementById('fi-nf-retorno') : document.getElementById('fi-nf-inpasa');
+  input.value=''; input.click();
+}
+document.getElementById('fi-nf-retorno').addEventListener('change', e => { if (e.target.files[0]) processPdf(e.target.files[0],'retorno'); });
+document.getElementById('fi-nf-inpasa').addEventListener('change',  e => { if (e.target.files[0]) processPdf(e.target.files[0],'inpasa');  });
+
+async function extractPdfText(file) {
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data:buf }).promise;
+  let txt='';
+  for (let i=1; i<=pdf.numPages; i++) {
+    const pg = await pdf.getPage(i);
+    const ct = await pg.getTextContent();
+    txt += ct.items.map(x=>x.str).join(' ') + '\n';
+  }
+  return txt;
+}
+
+function extractVagaoNumber(text) {
+  const patterns = [
+    /(?:PLACA|VAG[AÃ]O|VT)[:\s\-]*[A-Z]{0,6}[\s\-]?(\d{7})/gi,
+    /(?:PLACA|VAG[AÃ]O|VT)[:\s\-]*(\d{7})/gi,
+  ];
+  for (const re of patterns) {
+    re.lastIndex=0; const m=re.exec(text);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function extractNfNumber(text) {
+  const danfe = [
+    /DANFE[\s\S]{0,300}?N[º°o]\.?\s*(\d{6,12})/i,
+    /N[º°o]\.?\s*(\d{6,12})\s*S[ÉE]RIE/i,
+    /N[º°o]\s+(\d{6,12})/i,
+  ];
+  for (const re of danfe) { const m=text.match(re); if (m) return m[1]; }
+  const fallback = [
+    /NOTA\s+FISCAL[\s\S]{0,60}?N[º°o]\.?\s*(\d{4,12})/i,
+    /N[º°o]\s*(?:DA\s+)?NF[:\s]+(\d{4,12})/i,
+  ];
+  for (const re of fallback) { const m=text.match(re); if (m) return m[1]; }
+  return null;
+}
+
+function extractLacre(text) {
+  const patterns = [
+    /lacre[:\s]+([A-Z0-9\-]{4,20})/i,
+    /n[oº°]\.?\s*lacre[:\s]+([A-Z0-9\-]{4,20})/i,
+    /lacre\s+n[oº°]?\.?\s*([A-Z0-9\-]{4,20})/i,
+  ];
+  for (const re of patterns) { const m=text.match(re); if (m) return m[1].trim(); }
+  return null;
+}
+
+async function processPdf(file, type) {
+  toast('Lendo PDF…');
+  try {
+    const text = await extractPdfText(file);
+    const ctx  = pdfContext;
+    if (type==='retorno') {
+      const vagaoNum = extractVagaoNumber(text);
+      const lacre    = extractLacre(text);
+      const nfNum    = extractNfNumber(text);
+      pdfExtracted   = { type:'retorno', file, text, vagaoNum, lacre, nfNum, ctx };
+      document.getElementById('pdf-modal-title').textContent = 'Dados extraídos — NF de Retorno';
+      document.getElementById('pdf-modal-desc').textContent  = `Arquivo: ${file.name}. Confirme os dados antes de aplicar.`;
+      document.getElementById('pdf-extracted-fields').innerHTML = `
+        <div class="form-field">
+          <label>Número do Vagão (7 dígitos)</label>
+          <input type="text" id="pe-vagao" value="${vagaoNum||''}" placeholder="Ex: 1234567"
+            class="${vagaoNum&&vagaoNum.length!==7?'input-error':''}"
+            oninput="const d=this.value.replace(/\\D/g,'');const ok=this.value===''||d.length===7;this.classList.toggle('input-error',!ok);document.getElementById('pe-vagao-hint').classList.toggle('show',!ok);">
+          <div id="pe-vagao-hint" class="field-hint${vagaoNum&&vagaoNum.length!==7?' show':''}">O número do vagão deve ter exatamente 7 dígitos.</div>
+        </div>
+        <div class="form-field"><label>Número da NF de Retorno (DANFE)</label><input type="text" id="pe-nfret" value="${nfNum||''}" placeholder="Não identificado — insira manualmente"></div>
+        <div class="form-field"><label>Lacre</label><input type="text" id="pe-lacre" value="${lacre||''}" placeholder="Não identificado — insira manualmente"></div>`;
+      const warn = document.getElementById('pdf-warn');
+      if (!vagaoNum&&!lacre&&!nfNum) { warn.style.display='block'; warn.textContent='Nenhum dado identificado automaticamente. PDF pode ser escaneado. Preencha manualmente.'; }
+      else warn.style.display='none';
+    } else {
+      const nfNum = extractNfNumber(text);
+      const prog  = ProgAPI.list().find(p=>p.id===ctx.progId);
+      const vagaoDigits = (prog?.vagoes[ctx.vagaoIdx]?.vagao||'').replace(/\D/g,'');
+      pdfExtracted = { type:'inpasa', file, text, nfNum, ctx, vagaoDigits };
+      document.getElementById('pdf-modal-title').textContent = 'Dados extraídos — NF Inpasa';
+      document.getElementById('pdf-modal-desc').textContent  = `Arquivo: ${file.name}. Vagão ref. (nº): ${vagaoDigits||'não preenchido'}.`;
+      document.getElementById('pdf-extracted-fields').innerHTML = `
+        <div class="form-field"><label>Número da NF Inpasa (DANFE)</label><input type="text" id="pe-nfinpasa" value="${nfNum||''}" placeholder="Não identificado — insira manualmente"></div>`;
+      const warn = document.getElementById('pdf-warn');
+      if (!nfNum) { warn.style.display='block'; warn.textContent='Número da NF não identificado. Preencha manualmente.'; }
+      else warn.style.display='none';
+    }
+    openModal('modal-pdf');
+  } catch (err) { toast('Erro ao ler o PDF.',true); console.error(err); }
+}
+
+async function applyPdfData() {
+  if (!pdfExtracted) return;
+  const { type, ctx, file } = pdfExtracted;
+  const prog = ProgAPI.list().find(p=>p.id===ctx.progId);
+  if (!prog) return;
+  const v = prog.vagoes[ctx.vagaoIdx];
+  if (type==='retorno') {
+    const vagaoNum = document.getElementById('pe-vagao')?.value.trim();
+    const nfRet    = document.getElementById('pe-nfret')?.value.trim();
+    const lacre    = document.getElementById('pe-lacre')?.value.trim();
+    const digits   = (vagaoNum||'').replace(/\D/g,'');
+    if (vagaoNum && digits.length!==7) {
+      const el = document.getElementById('pe-vagao');
+      if (el) { el.classList.add('input-error'); el.focus(); }
+      const warn = document.getElementById('pdf-warn');
+      warn.style.display='block'; warn.style.background='#fee2e2'; warn.style.color='#b91c1c';
+      warn.textContent='O número do vagão deve conter exatamente 7 dígitos. Corrija antes de confirmar.';
+      return;
+    }
+    if (vagaoNum) v.vagao     = digits;
+    if (nfRet)    v.nfRetorno = nfRet;
+    if (lacre)    v.lacre     = lacre;
+    v.nfRetornoFileObj = file;
+    showLoading('Enviando PDF...');
+    try {
+      const { path } = await StorageAPI.uploadPdf(ctx.progId, ctx.vagaoIdx, 'retorno', file);
+      v.nfRetornoFile = file.name;
+      v.nfRetornoPath = path;
+      v.nfRetornoUrl  = null; // not used with Firestore storage
+      await saveVagaoField(ctx.progId, ctx.vagaoIdx);
+    } finally { hideLoading(); }
+  } else {
+    const nfInpasa = document.getElementById('pe-nfinpasa')?.value.trim();
+    if (nfInpasa) v.nfInpasa = nfInpasa;
+    v.nfInpasaFileObj = file;
+    showLoading('Enviando PDF...');
+    try {
+      const { path } = await StorageAPI.uploadPdf(ctx.progId, ctx.vagaoIdx, 'inpasa', file);
+      v.nfInpasaFile = file.name;
+      v.nfInpasaPath = path;
+      v.nfInpasaUrl  = null; // not used with Firestore storage
+      await saveVagaoField(ctx.progId, ctx.vagaoIdx);
+    } finally { hideLoading(); }
+  }
+  closeModal('modal-pdf'); renderTable(); toast('Dados aplicados com sucesso.'); pdfExtracted=null;
+}
+
+// ══════════════════════════════════════════
+// USERS
+// ══════════════════════════════════════════
+function openUserModal() {
+  openModal('modal-user');
+  ['u-nome','u-email','u-pass'].forEach(id=>document.getElementById(id).value='');
+}
+async function saveUser() {
+  const nome  = document.getElementById('u-nome').value.trim();
+  const email = document.getElementById('u-email').value.trim();
+  const pass  = document.getElementById('u-pass').value;
+  const role  = document.getElementById('u-role').value;
+  if (!nome||!email||!pass) { toast('Preencha todos os campos.',true); return; }
+  if (pass.length<6) { toast('Senha mínima de 6 caracteres.',true); return; }
+  showLoading('Criando usuário...');
+  try {
+    const res = await AuthAPI.createUser({ nome, email, pass, role, empresa:'', palavraSeguranca:'', active:true });
+    if (res && res.error) { toast(res.error,true); return; }
+    closeModal('modal-user'); await renderUsers(); toast('Usuário criado com sucesso.');
+  } catch(e) { toast('Erro: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+// ── Pending approval flow ──
+let approvingUserId = null;
+let deletingUserId  = null;
+
+function openApproveModal(userId) {
+  const u = DB.users.find(x=>x.uid===userId);
+  if (!u) return;
+  approvingUserId = userId;
+  document.getElementById('ap-nome-display').textContent    = u.nome || '—';
+  document.getElementById('ap-email-display').textContent   = u.email;
+  document.getElementById('ap-empresa-display').textContent = u.empresa ? `Empresa: ${u.empresa}` : '';
+  document.getElementById('ap-role').value = u.role || 'terminal';
+  document.getElementById('ap-pass').value = u.pass || '';
+  openModal('modal-approve');
+}
+
+async function approveUser() {
+  const u = DB.users.find(x=>x.uid===approvingUserId);
+  if (!u) return;
+  const role = document.getElementById('ap-role').value;
+  const pass = document.getElementById('ap-pass').value.trim();
+  if (pass && pass.length < 6) { toast('Senha mínima de 6 caracteres.',true); return; }
+  showLoading('Aprovando usuário...');
+  try {
+    await AuthAPI.approveUser(approvingUserId, role, pass);
+    closeModal('modal-approve');
+    await renderUsers();
+    toast('✓ '+(u.nome||u.email)+' aprovado como '+roleLabel(role)+'.');
+    approvingUserId = null;
+  } catch(e) { toast('Erro: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+async function rejectUser() {
+  const u = DB.users.find(x=>x.uid===approvingUserId);
+  if (!u) return;
+  showLoading('Recusando...');
+  try {
+    await AuthAPI.rejectUser(approvingUserId);
+    closeModal('modal-approve');
+    await renderUsers();
+    toast('Solicitação de '+(u.nome||u.email)+' recusada.');
+    approvingUserId = null;
+  } catch(e) { toast('Erro: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+async function quickReject(userId) {
+  showLoading('Recusando...');
+  try {
+    await AuthAPI.rejectUser(userId);
+    await renderUsers();
+    toast('Solicitação recusada.');
+  } catch(e) { toast('Erro: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+// ── Edit user ──
+function openEditUser(userId) {
+  const u = DB.users.find(x=>x.uid===userId);
+  if (!u) return;
+  document.getElementById('eu-id').value    = userId;
+  document.getElementById('eu-nome').value  = u.nome  || '';
+  document.getElementById('eu-email').value = u.email || '';
+  document.getElementById('eu-role').value  = u.role  || 'terminal';
+  document.getElementById('eu-pass').value  = '';
+  openModal('modal-edit-user');
+}
+
+async function saveEditUser() {
+  const id    = document.getElementById('eu-id').value;
+  const nome  = document.getElementById('eu-nome').value.trim();
+  const email = document.getElementById('eu-email').value.trim();
+  const role  = document.getElementById('eu-role').value;
+  const pass  = document.getElementById('eu-pass').value;
+  if (!nome||!email) { toast('Nome e e-mail são obrigatórios.',true); return; }
+  if (pass && pass.length<6) { toast('Senha mínima de 6 caracteres.',true); return; }
+  showLoading('Salvando...');
+  try {
+    const fields = { nome, email, role };
+    await AuthAPI.updateUser(id, fields);
+    closeModal('modal-edit-user');
+    await renderUsers();
+    toast('Usuário atualizado com sucesso.');
+    if (currentUser && currentUser.uid === id) {
+      currentUser.nome  = nome;
+      currentUser.email = email;
+      currentUser.role  = role;
+      document.getElementById('topbar-user').textContent = nome || email;
+      document.getElementById('topbar-role').textContent = getRoleDisplayName(role);
+    }
+  } catch(e) { toast('Erro: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+// ── Delete user ──
+function openDelUser(userId) {
+  const u = DB.users.find(x=>x.uid===userId);
+  if (!u) return;
+  deletingUserId = userId;
+  document.getElementById('del-user-name').textContent = u.nome || u.email;
+  openModal('modal-del-user');
+}
+
+async function confirmDeleteUser() {
+  if (deletingUserId === currentUser?.uid) { toast('Você não pode excluir a si mesmo.',true); return; }
+  showLoading('Excluindo usuário...');
+  try {
+    await AuthAPI.deleteUser(deletingUserId);
+    closeModal('modal-del-user');
+    await renderUsers();
+    toast('Usuário excluído.');
+    deletingUserId = null;
+  } catch(e) { toast('Erro: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+// ── Helpers ──
+function roleLabel(r) { return getRoleDisplayName(r) || r; }
+const roleClass = { master:'role-master', terminal:'role-terminal', csc:'role-csc' };
+
+async function renderUsers() {
+  showLoading('Carregando usuários...');
+  try {
+    DB.users = await AuthAPI.listUsers();
+  } catch(e) { console.error(e); }
+  finally { hideLoading(); }
+  const pending = DB.users.filter(u=>u.active===false);
+  const active  = DB.users.filter(u=>u.active!==false);
+
+  // Pending section
+  const ps = document.getElementById('pending-section');
+  const pl = document.getElementById('pending-list');
+  const pc = document.getElementById('pending-count');
+  ps.style.display = pending.length ? 'block' : 'none';
+  pc.textContent   = pending.length;
+  pl.innerHTML = pending.map(u=>`
+    <div class="pending-card">
+      <div class="pending-card-info">
+        <div class="pending-card-name">${esc(u.nome||'Sem nome')}</div>
+        <div class="pending-card-meta">${esc(u.email)}${u.empresa?' · '+esc(u.empresa):''}</div>
+        <div class="pending-card-meta" style="margin-top:2px;color:#92400e;">Aguardando aprovação do perfil</div>
+      </div>
+      <div class="pending-card-actions">
+        <button class="btn-reject-sm" onclick="quickReject('${u.uid||u.id}')" title="Recusar">✕</button>
+        <button class="btn-approve" onclick="openApproveModal('${u.uid||u.id}')">Avaliar →</button>
+      </div>
+    </div>`).join('');
+
+  // Active users
+  document.getElementById('active-users-label').style.display = active.length ? 'block' : 'none';
+  document.getElementById('user-list-wrap').innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">${
+    active.map(u=>`
+      <div class="user-row">
+        <div>
+          <div style="font-weight:700;font-size:13px;color:var(--text);">${esc(u.nome||u.email)}</div>
+          <div style="font-size:11px;color:var(--text-muted);">${esc(u.email)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="role-badge ${roleClass[u.role]||'role-terminal'}">${roleLabel(u.role)}</span>
+          ${u.uid===currentUser?.uid||u.id===currentUser?.uid?'<span style="font-size:10px;color:var(--text-muted);">(você)</span>':''}
+          <button class="btn-edit-user" onclick="openEditUser('${u.uid||u.id}')">✏ Editar</button>
+          ${u.uid!==currentUser?.uid&&u.id!==currentUser?.uid?`<button class="btn-del-user" onclick="openDelUser('${u.uid||u.id}')">🗑</button>`:''}
+        </div>
+      </div>`).join('')
+  }</div>`;
+  updatePendingBadge();
+  populateRoleSelects();
+}
+
+// ══════════════════════════════════════════
+// EXPORT EXCEL
+// ══════════════════════════════════════════
+function exportExcel() {
+  const progs = ProgAPI.list();
+  if (!progs.length) { toast('Nenhuma programação para exportar.',true); return; }
+  const rows = [['Data Prog.','Nº Pedido','Produto','Usina / Filial','Cliente','Local Entrega','Total Vagões','Vagão Nº','Nº NF Retorno','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Status']];
+  for (const p of progs) {
+    for (let i=0; i<p.vagoes.length; i++) {
+      const v=p.vagoes[i];
+      let status='Aguardando encoste';
+      if ((v.nfInpasa||'').trim()) status='Concluído';
+      else if ((v.nfRetorno||'').trim()) status='Ag. faturamento';
+      else if ((v.vagao||'').trim()) status='Em carregamento';
+      rows.push([fmtDate(p.data),p.pedido,p.produto,p.usina,p.cliente,p.local,i===0?p.qtd:'',v.vagao||'',v.nfRetorno||'',v.lacre||'',v.nfInpasa||'',v.nfRetornoFile||'',v.nfInpasaFile||'',status]);
+    }
+  }
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:12},{wch:18},{wch:22},{wch:24},{wch:24},{wch:12},{wch:12},{wch:16},{wch:14},{wch:16},{wch:22},{wch:22},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Programações');
+  const now=new Date();
+  const ds=`${now.getDate().toString().padStart(2,'0')}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getFullYear()}`;
+  XLSX.writeFile(wb,`Inpasa_Vagoes_${ds}.xlsx`);
+  toast('Relatório Excel gerado!');
+}
+
+// ══════════════════════════════════════════
+// PROFILES MANAGEMENT
+// ══════════════════════════════════════════
+let editingProfileId = null;
+
+function openProfileModal(profileId=null) {
+  editingProfileId = profileId;
+  document.getElementById('profile-modal-title').textContent = profileId ? 'Editar Perfil' : 'Novo Perfil';
+  const err = document.getElementById('p-err'); err.style.display='none';
+  if (profileId) {
+    const p = DB.customProfiles.find(x=>x.id===profileId);
+    if (p) {
+      document.getElementById('p-id').value   = p.id;
+      document.getElementById('p-name').value = p.name;
+      document.getElementById('p-base').value = p.baseRole;
+    }
+  } else {
+    document.getElementById('p-id').value   = '';
+    document.getElementById('p-name').value = '';
+    document.getElementById('p-base').value = 'terminal';
+  }
+  openModal('modal-profile');
+}
+
+async function saveProfile() {
+  const name     = document.getElementById('p-name').value.trim();
+  const baseRole = document.getElementById('p-base').value;
+  const err      = document.getElementById('p-err');
+  if (!name) { err.textContent='Informe o nome do perfil.'; err.style.display='block'; return; }
+
+  // Generate a role key based on baseRole prefix + name
+  const slug    = name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+  const roleKey = `${baseRole}_${slug}`;
+
+  showLoading('Salvando perfil...');
+  try {
+    await ProfilesAPI.save({ id: editingProfileId||'new', name, baseRole, roleKey });
+    closeModal('modal-profile');
+    renderProfiles();
+    populateTerminalSelects();
+    toast('Perfil salvo com sucesso.');
+  } catch(e) { toast('Erro: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+async function deleteProfile(profileId) {
+  showLoading('Removendo perfil...');
+  try {
+    await ProfilesAPI.delete(profileId);
+    renderProfiles();
+    populateTerminalSelects();
+    toast('Perfil removido.');
+  } catch(e) { toast('Erro: '+e.message,true); }
+  finally { hideLoading(); }
+}
+
+function renderProfiles() {
+  const wrap = document.getElementById('profiles-list-wrap');
+  if (!wrap) return;
+  const baseLabels = { terminal:'Terminal', csc:'CSC (Inpasa)', inpasa:'Inpasa' };
+
+  // Built-in profiles
+  const builtIn = [
+    { name:'Master',   baseRole:'master',   builtin:true, desc:'Acesso total + gestão de usuários e perfis' },
+    { name:'Inpasa',   baseRole:'inpasa',   builtin:true, desc:'Acesso total (sem gestão de usuários)' },
+    { name:'Terminal', baseRole:'terminal', builtin:true, desc:'Edita Vagão, NF Retorno e Lacre. Visão restrita ao terminal.' },
+    { name:'CSC',      baseRole:'csc',      builtin:true, desc:'Edita apenas NF Inpasa' },
+  ];
+  const roleColors = { master:'role-master', inpasa:'role-master', terminal:'role-terminal', csc:'role-csc' };
+
+  wrap.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Perfis padrão</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1.5rem;">
+      ${builtIn.map(p=>`
+        <div class="user-row">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="role-badge ${roleColors[p.baseRole]||'role-terminal'}">${p.name}</span>
+              <span style="font-size:11px;color:var(--text-muted);">${p.desc}</span>
+            </div>
+          </div>
+          <span style="font-size:10px;color:var(--text-muted);font-style:italic;">Padrão do sistema</span>
+        </div>`).join('')}
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Perfis personalizados</div>
+    ${DB.customProfiles.length===0
+      ? '<div style="font-size:13px;color:var(--text-muted);padding:1rem 0;">Nenhum perfil personalizado criado ainda. Clique em "+ Novo perfil" para adicionar.</div>'
+      : `<div style="display:flex;flex-direction:column;gap:6px;">
+          ${DB.customProfiles.map(p=>`
+            <div class="user-row">
+              <div>
+                <div style="font-weight:700;font-size:13px;color:var(--text);">${esc(p.name)}</div>
+                <div style="font-size:11px;color:var(--text-muted);">Tipo base: ${baseLabels[p.baseRole]||p.baseRole}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="role-badge ${roleColors[p.baseRole]||'role-terminal'}">${esc(p.name)}</span>
+                <button class="btn-edit-user" onclick="openProfileModal(${p.id})">✏ Editar</button>
+                <button class="btn-del-user" onclick="deleteProfile(${p.id})">🗑</button>
+              </div>
+            </div>`).join('')}
+        </div>`}`;
+}
+
+function populateTerminalSelects() {
+  // Populate f-terminal in prog modal
+  const ft = document.getElementById('f-terminal');
+  if (ft) {
+    const current = ft.value;
+    ft.innerHTML = '<option value="">Nenhum (visível a todos)</option>' +
+      DB.customProfiles.filter(p=>p.baseRole==='terminal').map(p=>
+        `<option value="${esc(p.name)}" ${current===p.name?'selected':''}>${esc(p.name)}</option>`
+      ).join('');
+  }
+  // Populate filter-terminal
+  const fft = document.getElementById('filter-terminal');
+  if (fft) {
+    const current2 = fft.value;
+    fft.innerHTML = '<option value="">Todos</option>' +
+      DB.customProfiles.filter(p=>p.baseRole==='terminal').map(p=>
+        `<option value="${esc(p.name)}" ${current2===p.name?'selected':''}>${esc(p.name)}</option>`
+      ).join('');
+  }
+  // Populate role selects in modals (approve + edit user)
+  populateRoleSelects();
+}
+
+function populateRoleSelects() {
+  const builtIn = [
+    { value:'master',   label:'Master' },
+    { value:'inpasa',   label:'Inpasa' },
+    { value:'terminal', label:'Terminal (genérico)' },
+    { value:'csc',      label:'CSC' },
+  ];
+  const custom = DB.customProfiles.map(p=>({ value:p.roleKey, label:p.name + ' ('+( {terminal:'Terminal',csc:'CSC',inpasa:'Inpasa'}[p.baseRole]||p.baseRole)+')' }));
+  const options = [...builtIn, ...custom].map(o=>`<option value="${o.value}">${o.label}</option>`).join('');
+  ['ap-role','eu-role','u-role'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    const cur = el.value;
+    el.innerHTML = options;
+    if (cur) el.value = cur;
+  });
+}
+
+// ══════════════════════════════════════════
+// EXPORT ZIP (PDFs organizados por pasta)
+// ══════════════════════════════════════════
+async function exportZip() {
+  const progs = ProgAPI.list();
+  if (!progs.length) { toast('Nenhuma programação para exportar.',true); return; }
+
+  // Count how many files we have
+  let totalFiles = 0;
+  for (const p of progs)
+    for (const v of p.vagoes) {
+      if (v.nfRetornoFileObj) totalFiles++;
+      if (v.nfInpasaFileObj)  totalFiles++;
+    }
+
+  if (!totalFiles) {
+    toast('Nenhum PDF anexado para baixar.',true);
+    return;
+  }
+
+  toast('Gerando arquivo ZIP…');
+
+  const zip = new JSZip();
+
+  // Helper: sanitize folder/file names
+  const safe = s => (s||'').replace(/[\/\\:*?"<>|]/g,'_').trim() || 'sem_nome';
+
+  for (const p of progs) {
+    // Folder name: Data_Pedido_Cliente
+    const folderName = safe(`${fmtDate(p.data)}_Pedido${p.pedido}_${p.cliente}`);
+    const retornoFolder = zip.folder(`${folderName}/NF_Retorno`);
+    const inpasaFolder  = zip.folder(`${folderName}/NF_Inpasa`);
+
+    for (let i = 0; i < p.vagoes.length; i++) {
+      const v = p.vagoes[i];
+      const vagaoLabel = safe(v.vagao || `Vagao_${i+1}`);
+
+      if (v.nfRetornoFile && v.vid) {
+        const ext   = (v.nfRetornoFile).split('.').pop() || 'pdf';
+        const fname = `NF_Retorno_${vagaoLabel}.${ext}`;
+        try {
+          const blob = v.nfRetornoFileObj
+            ? v.nfRetornoFileObj
+            : await StorageAPI.getPdfBlob(p.id, v.vid, 'retorno');
+          if (blob) retornoFolder.file(fname, blob);
+        } catch(e) { console.warn('ZIP retorno:', e); }
+      }
+
+      if (v.nfInpasaFile && v.vid) {
+        const ext   = (v.nfInpasaFile).split('.').pop() || 'pdf';
+        const fname = `NF_Inpasa_${vagaoLabel}.${ext}`;
+        try {
+          const blob = v.nfInpasaFileObj
+            ? v.nfInpasaFileObj
+            : await StorageAPI.getPdfBlob(p.id, v.vid, 'inpasa');
+          if (blob) inpasaFolder.file(fname, blob);
+        } catch(e) { console.warn('ZIP inpasa:', e); }
+      }
+    }
+  }
+
+  try {
+    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{ level:6 } });
+    const now  = new Date();
+    const ds   = `${now.getDate().toString().padStart(2,'0')}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getFullYear()}`;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `Inpasa_Arquivos_${ds}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    toast(`✓ ZIP gerado com ${totalFiles} arquivo(s)!`);
+  } catch(e) {
+    toast('Erro ao gerar ZIP.',true);
+    console.error(e);
+  }
+}
+let toastTimer;
+function toast(msg, err=false) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast show'+(err?' err':'');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{ el.className='toast'; },3000);
+}
+
+</script>
+</body>
+</html>

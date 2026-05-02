@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║   INPASA – STORAGE RULES                                            ║
+// ║                                                                      ║
+// ║   Firebase Storage NÃO é utilizado neste projeto.                  ║
+// ║   Os PDFs são armazenados em Base64 no Firestore (coleção          ║
+// ║   pdfData dentro de cada vagão).                                    ║
+// ║                                                                      ║
+// ║   Este arquivo bloqueia qualquer acesso ao Storage por segurança.   ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

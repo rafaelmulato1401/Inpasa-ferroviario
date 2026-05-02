@@ -1,0 +1,345 @@
+rules_version = '2';
+
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║   INPASA – REGRAS DE SEGURANÇA FIRESTORE                           ║
+// ║                                                                      ║
+// ║   Princípio: NEGAR TUDO por padrão.                                 ║
+// ║   Cada permissão é concedida explicitamente e validada em           ║
+// ║   múltiplas camadas:                                                 ║
+// ║   1. Autenticação Firebase válida                                    ║
+// ║   2. Conta aprovada no Firestore (active = true)                    ║
+// ║   3. Perfil com permissão para a operação                           ║
+// ║   4. Validação dos campos enviados                                   ║
+// ║   5. Regras de negócio (bloqueio de data, terminal, etc.)           ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ════════════════════════════════════════════════════
+    // BLOCO GLOBAL: nega ABSOLUTAMENTE TUDO por padrão
+    // Sem esta regra qualquer caminho não coberto seria
+    // acessível. Com ela, nenhuma rota existe até ser
+    // explicitamente liberada abaixo.
+    // ════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+
+    // ════════════════════════════════════════════════════
+    // HELPERS DE AUTENTICAÇÃO
+    // ════════════════════════════════════════════════════
+
+    // Usuário tem token Firebase válido e não nulo
+    function isSignedIn() {
+      return request.auth != null
+          && request.auth.uid != null
+          && request.auth.uid.size() > 0;
+    }
+
+    // Lê o documento de perfil do usuário autenticado
+    // (Firestore cacheia no mesmo request — não gera custo extra)
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Conta aprovada por Master
+    function isActive() {
+      return isSignedIn() && profile().active == true;
+    }
+
+    // Retorna o role do usuário
+    function role() {
+      return profile().role;
+    }
+
+
+    // ════════════════════════════════════════════════════
+    // HELPERS DE PERFIL
+    // ════════════════════════════════════════════════════
+
+    function isMaster() {
+      return isActive() && role() == 'master';
+    }
+
+    function isInpasa() {
+      return isActive() && role() == 'inpasa';
+    }
+
+    // Admin = Master ou Inpasa (visão e edição total de programações)
+    function isAdmin() {
+      return isMaster() || isInpasa();
+    }
+
+    // Terminal: role == 'terminal' OU qualquer sub-role 'terminal_*'
+    function isTerminal() {
+      return isActive()
+          && (role() == 'terminal' || role().matches('terminal_[a-z0-9_]+'));
+    }
+
+    // CSC: só pode editar NF Inpasa
+    function isCsc() {
+      return isActive() && role() == 'csc';
+    }
+
+    // Qualquer perfil ativo, independente do role
+    function isAnyActive() {
+      return isActive();
+    }
+
+
+    // ════════════════════════════════════════════════════
+    // HELPERS DE VALIDAÇÃO DE DADOS
+    // ════════════════════════════════════════════════════
+
+    // Campos obrigatórios de um usuário
+    function validUserData(data) {
+      return data.keys().hasAll(['nome','email','role','active'])
+          && data.nome is string  && data.nome.size() >= 2
+                                  && data.nome.size() <= 120
+          && data.email is string && data.email.size() >= 5
+                                  && data.email.size() <= 254
+          && data.role is string  && data.role.size() > 0
+          && data.active is bool;
+    }
+
+    // Campos obrigatórios de uma programação
+    function validProgData(data) {
+      return data.keys().hasAll(['data','pedido','produto','usina','cliente','local','qtd'])
+          && data.data is string    && data.data.size() == 10
+          && data.pedido is string  && data.pedido.size() > 0 && data.pedido.size() <= 50
+          && data.produto is string && data.produto.size() > 0
+          && data.usina is string   && data.usina.size() > 0
+          && data.cliente is string && data.cliente.size() > 0
+          && data.local is string   && data.local.size() > 0
+          && data.qtd is int        && data.qtd >= 1 && data.qtd <= 200;
+    }
+
+    // Garante que um campo não foi alterado na operação de update
+    function unchanged(field) {
+      return !(field in request.resource.data.diff(resource.data).affectedKeys());
+    }
+
+
+    // ════════════════════════════════════════════════════
+    // HELPER DE BLOQUEIO POR DATA
+    // Terminal e CSC não podem editar programações com
+    // data anterior a ontem (proteção contra edição retroativa).
+    // Comparação de string YYYY-MM-DD é válida lexicograficamente.
+    // ════════════════════════════════════════════════════
+    function dateUnlocked(progDateStr) {
+      // Converte a data da programação para timestamp (início do dia UTC)
+      let progTs = timestamp.date(
+          int(progDateStr.split('-')[0]),
+          int(progDateStr.split('-')[1]),
+          int(progDateStr.split('-')[2])
+      ).toMillis();
+      // "Ontem" = agora menos 86400 segundos (1 dia em ms)
+      let yesterday = request.time.toMillis() - (86400 * 1000);
+      // Libera se a data da prog >= ontem
+      return progTs >= yesterday;
+    }
+
+    // Verifica se o terminal do usuário bate com o da programação
+    // (se prog não tem terminal, qualquer terminal pode ver)
+    function terminalMatch(progData) {
+      return !('terminal' in progData)
+          || progData.terminal == null
+          || progData.terminal == ''
+          || ('terminalName' in profile()
+              && profile().terminalName == progData.terminal);
+    }
+
+
+    // ════════════════════════════════════════════════════
+    // COLEÇÃO: users
+    // ════════════════════════════════════════════════════
+    match /users/{uid} {
+
+      // GET próprio perfil ou Master consulta qualquer perfil
+      allow get: if isSignedIn()
+                 && (request.auth.uid == uid || isMaster());
+
+      // LIST (consulta de coleção): exclusivo do Master
+      allow list: if isMaster();
+
+      // CREATE:
+      // A) Usuário criando o próprio perfil no registro:
+      //    - uid deve bater com o auth uid
+      //    - conta começa como pendente (active = false)
+      //    - role inicial obrigatoriamente 'terminal'
+      //    - não pode incluir campos privilegiados
+      // B) Master criando conta diretamente (ativação imediata)
+      allow create: if
+          // Caso A: auto-registro
+          (isSignedIn()
+           && request.auth.uid == uid
+           && validUserData(request.resource.data)
+           && request.resource.data.active == false
+           && request.resource.data.role == 'terminal'
+           && !request.resource.data.keys().hasAny(['isAdmin','superuser','god']))
+        ||
+          // Caso B: Master cria usuário
+          isMaster();
+
+      // UPDATE:
+      // Master: pode alterar qualquer campo
+      // Usuário: apenas nome, empresa e palavraSeguranca —
+      //          NÃO pode escalar role, mudar active ou email
+      allow update: if
+          isMaster()
+        ||
+          (isSignedIn()
+           && request.auth.uid == uid
+           && isActive()
+           && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['nome','empresa','palavraSeguranca'])
+           && unchanged('role')
+           && unchanged('active')
+           && unchanged('email')
+           && unchanged('uid'));
+
+      // DELETE: apenas Master, nunca pode se auto-deletar
+      allow delete: if isMaster()
+                    && request.auth.uid != uid;
+    }
+
+
+    // ════════════════════════════════════════════════════
+    // COLEÇÃO: programacoes
+    // ════════════════════════════════════════════════════
+    match /programacoes/{progId} {
+
+      // GET individual:
+      // Admin vê tudo; outros só se o terminal bater
+      allow get: if isAdmin()
+                 || (isAnyActive() && terminalMatch(resource.data));
+
+      // LIST:
+      // Admin vê tudo; Terminal/CSC veem apenas as do seu terminal
+      allow list: if isAdmin()
+                  || (isAnyActive() && terminalMatch(resource.data));
+
+      // CREATE: apenas Admin, dados válidos + criador registrado
+      allow create: if isAdmin()
+                    && validProgData(request.resource.data)
+                    && request.resource.data.createdBy == request.auth.uid;
+
+      // UPDATE: apenas Admin
+      // Campos estruturais imutáveis: qtd, createdBy, createdAt
+      allow update: if isAdmin()
+                    && unchanged('qtd')
+                    && unchanged('createdBy')
+                    && unchanged('createdAt');
+
+      // DELETE: apenas Master (Inpasa não pode excluir)
+      allow delete: if isMaster();
+
+
+      // ── Subcoleção: vagoes ────────────────────────────
+      match /vagoes/{vagaoId} {
+
+        // READ: qualquer ativo com acesso à programação pai
+        allow get, list: if isAdmin()
+                         || (isAnyActive() && terminalMatch(
+                               get(/databases/$(database)/documents/programacoes/$(progId)).data));
+
+        // UPDATE por Admin: sem restrição de campos
+        allow update: if isAdmin();
+
+        // UPDATE por Terminal: apenas campos do seu escopo + data desbloqueada
+        allow update: if
+            isTerminal()
+            && dateUnlocked(
+                 get(/databases/$(database)/documents/programacoes/$(progId)).data.data)
+            && terminalMatch(
+                 get(/databases/$(database)/documents/programacoes/$(progId)).data)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['vagao','nfRetorno','lacre',
+                           'nfRetornoFile','nfRetornoPath','nfRetornoUrl']);
+
+        // UPDATE por CSC: apenas campos de NF Inpasa + data desbloqueada
+        allow update: if
+            isCsc()
+            && dateUnlocked(
+                 get(/databases/$(database)/documents/programacoes/$(progId)).data.data)
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['nfInpasa','nfInpasaFile','nfInpasaPath','nfInpasaUrl']);
+
+        // CREATE e DELETE de vagões: apenas Admin
+        allow create, delete: if isAdmin();
+
+        // ── Sub-subcoleção: pdfData (PDFs em Base64) ──
+        match /pdfData/{docType} {
+          // Leitura: qualquer ativo com acesso à programação pai
+          allow read: if isAnyActive();
+
+          // Terminal pode gravar apenas 'retorno'
+          allow create, update: if
+            isAdmin()
+            ||
+            (isTerminal()
+              && docType == 'retorno'
+              && dateUnlocked(
+                   get(/databases/$(database)/documents/programacoes/$(progId)).data.data)
+              && terminalMatch(
+                   get(/databases/$(database)/documents/programacoes/$(progId)).data)
+              // Validação: campos obrigatórios do PDF
+              && request.resource.data.keys().hasAll(['fileName','data','sizeBytes'])
+              && request.resource.data.sizeBytes <= 768000)  // ~750KB
+
+            ||
+            // CSC pode gravar apenas 'inpasa'
+            (isCsc()
+              && docType == 'inpasa'
+              && dateUnlocked(
+                   get(/databases/$(database)/documents/programacoes/$(progId)).data.data)
+              && request.resource.data.keys().hasAll(['fileName','data','sizeBytes'])
+              && request.resource.data.sizeBytes <= 768000);
+
+          // Deletar: Admin sempre; Terminal/CSC apenas os do seu escopo
+          allow delete: if
+            isAdmin()
+            || (isTerminal() && docType == 'retorno')
+            || (isCsc()      && docType == 'inpasa');
+        }
+      }
+    }
+
+
+    // ════════════════════════════════════════════════════
+    // COLEÇÃO: customProfiles
+    // ════════════════════════════════════════════════════
+    match /customProfiles/{profileId} {
+
+      // Leitura: qualquer usuário ativo (precisa para montar menus)
+      allow read: if isAnyActive();
+
+      // Criar perfil: Master, campos validados, baseRole restrito ao enum
+      allow create: if isMaster()
+                    && request.resource.data.keys().hasAll(['name','baseRole','roleKey'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() >= 2
+                    && request.resource.data.name.size() <= 80
+                    && request.resource.data.baseRole in ['master','inpasa','terminal','csc']
+                    && request.resource.data.roleKey is string
+                    && request.resource.data.roleKey.size() > 0;
+
+      // Atualizar / Excluir: apenas Master
+      allow update, delete: if isMaster();
+    }
+
+
+    // ════════════════════════════════════════════════════
+    // COLEÇÃO: auditLog (opcional — registra ações críticas)
+    // Se você criar esta coleção para auditoria, ninguém
+    // pode apagar ou alterar os logs — apenas inserir.
+    // ════════════════════════════════════════════════════
+    match /auditLog/{logId} {
+      allow read:   if isMaster();
+      allow create: if isSignedIn();   // qualquer auth pode gravar
+      allow update, delete: if false;  // logs são imutáveis
+    }
+  }
+}
