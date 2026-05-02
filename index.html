@@ -1973,13 +1973,34 @@ document.getElementById('fi-nf-retorno').addEventListener('change', e => { if (e
 document.getElementById('fi-nf-inpasa').addEventListener('change',  e => { if (e.target.files[0]) processPdf(e.target.files[0],'inpasa');  });
 
 async function extractPdfText(file) {
+  // Tenta múltiplas estratégias para garantir leitura do PDF
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data:buf }).promise;
-  let txt='';
-  for (let i=1; i<=pdf.numPages; i++) {
-    const pg = await pdf.getPage(i);
-    const ct = await pg.getTextContent();
-    txt += ct.items.map(x=>x.str).join(' ') + '\n';
+  
+  // Configura worker — tenta CDN e fallback fake worker
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  let pdf;
+  try {
+    pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  } catch(e) {
+    // Tenta sem worker (modo síncrono) como fallback
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    pdf = await pdfjsLib.getDocument({ data: buf, disableWorker: true }).promise;
+  }
+
+  let txt = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    try {
+      const pg = await pdf.getPage(i);
+      const ct = await pg.getTextContent();
+      // Agrupa por linha usando transform Y para manter proximidade de texto
+      txt += ct.items.map(x => x.str).join(' ') + '\n';
+    } catch(e) {
+      console.warn(`Erro ao ler página ${i}:`, e);
+    }
   }
   return txt;
 }
@@ -2136,8 +2157,39 @@ async function processPdf(file, type) {
       else warn.style.display='none';
     }
     openModal('modal-pdf');
-  } catch (err) { toast('Erro ao ler o PDF.',true); console.error(err); }
-}
+  } catch (err) {
+    console.error('Erro ao ler PDF:', err);
+    // Mesmo com erro, abre modal para preenchimento manual
+    const warn = document.getElementById('pdf-warn');
+    pdfExtracted = { type, file, text:'', vagaoNum:null, lacre:null, nfNum:null, volume:null, ctx:pdfContext, cnpjOk:true };
+    document.getElementById('pdf-modal-title').textContent =
+      type === 'retorno' ? 'NF de Retorno — Preenchimento manual' : 'NF Inpasa — Preenchimento manual';
+    document.getElementById('pdf-modal-desc').textContent =
+      `Arquivo: ${file?.name || ''}. Não foi possível extrair dados automaticamente (${err?.message || 'erro desconhecido'}). Preencha manualmente.`;
+
+    if (type === 'retorno') {
+      document.getElementById('pdf-extracted-fields').innerHTML = `
+        <div class="form-field">
+          <label>Número do Vagão (7 dígitos)</label>
+          <input type="text" id="pe-vagao" value="" placeholder="Ex: 1234567">
+          <div id="pe-vagao-hint" class="field-hint">O número do vagão deve ter exatamente 7 dígitos.</div>
+        </div>
+        <div class="form-field"><label>Número da NF de Retorno (DANFE)</label><input type="text" id="pe-nfret" value="" placeholder="Digite o número da NF"></div>
+        <div class="form-field"><label>Volume (m³)</label><input type="text" id="pe-volume" value="" placeholder="Ex: 104.761"></div>
+        <div class="form-field"><label>Lacre</label><input type="text" id="pe-lacre" value="" placeholder="Digite o lacre"></div>`;
+    } else {
+      document.getElementById('pdf-extracted-fields').innerHTML = `
+        <div class="form-field"><label>Número da NF Inpasa (DANFE)</label><input type="text" id="pe-nfinpasa" value="" placeholder="Digite o número da NF Inpasa"></div>`;
+    }
+
+    if (warn) {
+      warn.style.display = 'block';
+      warn.style.background = '#fef3c7';
+      warn.style.color = '#92400e';
+      warn.textContent = '⚠️ Não foi possível ler o PDF automaticamente. Preencha os campos manualmente e confirme.';
+    }
+    openModal('modal-pdf');
+  }
 
 async function applyPdfData() {
   if (!pdfExtracted) return;
