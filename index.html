@@ -1378,57 +1378,47 @@ function getExpectedCnpj(progId) {
   return null;
 }
 
-// Extrai CNPJ do texto do PDF (remetente/emitente — quem emitiu a NF)
-function extractCnpjEmitente(text) {
-  // O CNPJ do emitente aparece no bloco do remetente/emitente da DANFE
-  // Formato: 14 dígitos seguidos, ou com pontos/barras
-  const patterns = [
-    // CNPJ formatado: 29.316.596/0004-68
-    /CNPJ[\s\/CPF]*[:\s]*(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/i,
-    // CNPJ sem formatação: 29316596000468
-    /CNPJ[\s\/CPF]*[:\s]*(\d{14})/i,
-  ];
-  
-  // Pega TODOS os CNPJs do documento e retorna o do emitente (primeiro que aparece)
-  const allCnpjs = [];
-  const reAll = /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/g;
+// Extrai todos os CNPJs de um texto (formatados ou não)
+function extractAllCnpjs(text) {
+  const cnpjs = new Set();
+  // Formato com pontuação: 29.316.596/0004-68
+  const re1 = /\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/g;
   let m;
-  while ((m = reAll.exec(text)) !== null) {
-    const clean = m[1].replace(/[.\/-]/g,'');
-    if (!allCnpjs.includes(clean)) allCnpjs.push(clean);
+  while ((m = re1.exec(text)) !== null) {
+    cnpjs.add(m[0].replace(/[.\/-]/g,''));
   }
-  // O emitente geralmente é o primeiro CNPJ grande que aparece no documento
-  // Na NF de retorno, o emitente é a filial Inpasa
-  if (allCnpjs.length > 0) return allCnpjs[0];
-  return null;
+  // Formato sem pontuação: 29316596000468 (14 dígitos)
+  // Garante que não é parte de número maior
+  const re2 = /(?<!\d)(\d{14})(?!\d)/g;
+  while ((m = re2.exec(text)) !== null) {
+    cnpjs.add(m[1]);
+  }
+  return [...cnpjs];
 }
 
 // Valida se o CNPJ da NF corresponde à filial da programação
 function validateNfCnpj(pdfText, progId) {
   const expected = getExpectedCnpj(progId);
-  if (!expected) return { ok: true, warning: true, msg: 'Filial não mapeada — verifique manualmente.' };
-  
-  const cnpjsNaNF = [];
-  const reAll = /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/g;
-  let m;
-  while ((m = reAll.exec(pdfText)) !== null) {
-    const clean = m[1].replace(/[.\/-]/g,'');
-    if (!cnpjsNaNF.includes(clean)) cnpjsNaNF.push(clean);
-  }
-  
+  // Se filial não mapeada, passa sem bloquear
+  if (!expected) return { ok: true, warning: true };
+
+  const cnpjsNaNF = extractAllCnpjs(pdfText);
+  console.log('CNPJs na NF:', cnpjsNaNF, '| Esperado:', expected);
+
   if (cnpjsNaNF.includes(expected)) {
     return { ok: true, cnpj: expected };
   }
-  
-  // Identifica qual filial o CNPJ pertence (para mensagem de erro clara)
-  const found = cnpjsNaNF.find(c => Object.values(FILIAL_CNPJ).includes(c));
+
+  // Identifica qual filial Inpasa aparece na NF (para mensagem clara)
+  const allFilialCnpjs = Object.values(FILIAL_CNPJ);
+  const found       = cnpjsNaNF.find(c => allFilialCnpjs.includes(c));
   const foundFilial = found ? Object.keys(FILIAL_CNPJ).find(k => FILIAL_CNPJ[k] === found) : null;
-  const prog = ProgAPI.list().find(p => p.id === progId);
-  
+  const prog        = ProgAPI.list().find(p => p.id === progId);
+
   return {
     ok: false,
-    cnpj: found || cnpjsNaNF[0],
-    msg: `NF não pertence à filial da programação.\n\nProgramação: ${prog?.usina || '?'}\nNF encontrada: ${foundFilial || found || 'CNPJ não identificado'}`
+    cnpj: found || cnpjsNaNF[0] || '?',
+    msg: `NF não pertence à filial da programação.\n\nProgramação: ${prog?.usina || '?'}\nCNPJ esperado: ${expected}\nCNPJs na NF: ${cnpjsNaNF.join(', ') || 'nenhum identificado'}\n${foundFilial ? 'Filial encontrada na NF: '+foundFilial : ''}`
   };
 }
 
@@ -2093,12 +2083,16 @@ async function processPdf(file, type) {
       // Validação de CNPJ: NF deve pertencer à filial da programação
       const cnpjCheck = validateNfCnpj(text, ctx.progId);
       if (!cnpjCheck.ok) {
-        hideLoading();
-        const proceed = confirm(
-          '⚠️ ATENÇÃO — NF de filial incorreta!\n\n' + cnpjCheck.msg +
-          '\n\nDeseja prosseguir mesmo assim?'
-        );
-        if (!proceed) return;
+        // Se não encontrou nenhum CNPJ no PDF (ex: PDF escaneado), não bloqueia
+        const noCnpjFound = !cnpjCheck.cnpj || cnpjCheck.cnpj === '?';
+        if (!noCnpjFound) {
+          hideLoading();
+          const proceed = confirm(
+            '⚠️ ATENÇÃO — NF de filial incorreta!\n\n' + cnpjCheck.msg +
+            '\n\nDeseja prosseguir mesmo assim?'
+          );
+          if (!proceed) return;
+        }
       }
       
       pdfExtracted   = { type:'retorno', file, text, vagaoNum, lacre, nfNum, volume, ctx, cnpjOk: cnpjCheck.ok };
