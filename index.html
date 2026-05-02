@@ -5,6 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Inpasa – Programações Ferroviárias</title>
 
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1a3a6b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Inpasa Ferroviário">
+<meta name="application-name" content="Inpasa Ferroviário">
+<meta name="description" content="Programações Ferroviárias Inpasa — Controle de vagões, NFs e embarques.">
+<meta name="msapplication-TileColor" content="#1a3a6b">
+<!-- Apple touch icons -->
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="120x120" href="/icons/icon-128.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-32.png">
+
 <!-- Firebase SDKs (compat) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -2394,6 +2411,17 @@ function toast(msg, err=false) {
   el.textContent=msg; el.className='toast show'+(err?' err':'');
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>{ el.className='toast'; },3000);
+}
+
+// ══════════════════════════════════════════
+// SERVICE WORKER REGISTRATION (PWA)
+// ══════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('✅ SW registrado:', reg.scope))
+      .catch(err => console.warn('SW erro:', err));
+  });
 }
 
 </script>
