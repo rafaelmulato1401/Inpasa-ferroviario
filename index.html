@@ -603,7 +603,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th class="hide-mobile">Local entrega</th>
                 <th style="text-align:center;width:50px">Vag.</th>
                 <th style="width:100px">Vagão Nº</th>
-                <th style="width:90px">NF Retorno</th>
+                <th style="width:90px">NF Retorno</th><th style="width:80px">Volume (m³)</th>
                 <th class="hide-mobile" style="width:80px">Lacre</th>
                 <th style="width:90px">NF Inpasa</th>
                 <th style="width:120px">Status</th>
@@ -1058,10 +1058,12 @@ const ProgAPI = {
       // Ensure all vagao fields exist (without loading Base64 PDF data)
       p.vagoes = p.vagoes.map(v => ({
         vagao:'', nfRetorno:'', lacre:'', nfInpasa:'',
+        volume:'',
         nfRetornoFile:null, nfRetornoFileObj:null,
         nfInpasaFile:null,  nfInpasaFileObj:null,
         nfRetornoPath:null, nfInpasaPath:null,
         nfRetornoUrl:null,  nfInpasaUrl:null,
+        nfRetornoAt:null, nfInpasaAt:null,
         ...v
       }));
     }));
@@ -1585,8 +1587,10 @@ async function saveVagaoField(progId, idx) {
   try {
     await ProgAPI.updateVagao(progId, v.vid, {
       vagao:v.vagao||'', nfRetorno:v.nfRetorno||'', lacre:v.lacre||'', nfInpasa:v.nfInpasa||'',
+      volume:v.volume||'',
       nfRetornoFile:v.nfRetornoFile||null, nfRetornoPath:v.nfRetornoPath||null, nfRetornoUrl:v.nfRetornoUrl||null,
       nfInpasaFile:v.nfInpasaFile||null,  nfInpasaPath:v.nfInpasaPath||null,  nfInpasaUrl:v.nfInpasaUrl||null,
+      nfRetornoAt:v.nfRetornoAt||null, nfInpasaAt:v.nfInpasaAt||null,
     });
   } catch(e) { console.error('saveVagaoField:', e); }
 }
@@ -1678,6 +1682,16 @@ function getFilteredProgs() {
 // ══════════════════════════════════════════
 // TABLE RENDER
 // ══════════════════════════════════════════
+function fmtDateTime() {
+  const now = new Date();
+  const d = now.getDate().toString().padStart(2,'0');
+  const m = (now.getMonth()+1).toString().padStart(2,'0');
+  const y = now.getFullYear();
+  const h = now.getHours().toString().padStart(2,'0');
+  const min = now.getMinutes().toString().padStart(2,'0');
+  return `${d}/${m}/${y} ${h}:${min}`;
+}
+
 function fmtDate(d) {
   if (!d) return '';
   const [y,m,dia] = d.split('-');
@@ -1699,7 +1713,7 @@ function renderTable() {
   fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
 
   if (!progs.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="13">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="14">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
     return;
   }
 
@@ -1712,19 +1726,19 @@ function renderTable() {
     const lockNote = locked ? '<span class="locked-badge">Bloqueado</span>' : '';
 
     html += `<tr class="row-prog">
-      <td><span class="expand-btn" onclick="toggleCollapse(${p.id})">${arrow}</span>${fmtDate(p.data)}${lockNote}</td>
+      <td><span class="expand-btn" onclick="toggleCollapse('${p.id}')">${arrow}</span>${fmtDate(p.data)}${lockNote}</td>
       <td>${esc(p.pedido)}</td>
       <td class="hide-mobile">${esc(p.produto)}</td>
       <td class="hide-mobile">${esc(p.usina)}</td>
       <td class="hide-mobile">${esc(p.cliente)}</td>
       <td class="hide-mobile">${esc(p.local)}</td>
       <td style="text-align:center;">${p.qtd}</td>
-      <td colspan="4" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
+      <td colspan="5" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
       <td></td>
       <td>
         <div class="action-icons">
-          <button class="icon-btn" title="Editar" onclick="openProgModal(${p.id})" ${(!canEdit||locked)?'disabled':''}>✏️</button>
-          <button class="icon-btn del" title="Excluir" onclick="openDeleteModal(${p.id})" ${(!canDel||locked)?'disabled':''}>🗑️</button>
+          <button class="icon-btn" title="Editar" onclick="openProgModal('${p.id}')" ${(!canEdit||locked)?'disabled':''}>✏️</button>
+          <button class="icon-btn del" title="Excluir" onclick="openDeleteModal('${p.id}')" ${(!canDel||locked)?'disabled':''}>🗑️</button>
         </div>
       </td>
     </tr>`;
@@ -1746,36 +1760,41 @@ function renderTable() {
 
         const retHtml = hasRet
           ? `<div class="pdf-file-row">
-               <button class="pdf-btn has-file" ${!canUR?'disabled':''} onclick="triggerPdfUpload(${p.id},${i},'retorno')" title="${esc(v.nfRetornoFile)}">📎 PDF</button>
-               ${canUR?`<span class="pdf-remove" onclick="removePdf(${p.id},${i},'retorno')">✕</span>`:''}
+               <button class="pdf-btn has-file" ${!canUR?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'retorno')" title="${esc(v.nfRetornoFile)}">📎 PDF</button>
+               ${canUR?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'retorno')">✕</span>`:''}
              </div>`
-          : `<button class="pdf-btn" ${!canUR?'disabled':''} onclick="triggerPdfUpload(${p.id},${i},'retorno')">📎 Anexar</button>`;
+          : `<button class="pdf-btn" ${!canUR?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'retorno')">📎 Anexar</button>`;
 
         const inpHtml = hasInp
           ? `<div class="pdf-file-row">
-               <button class="pdf-btn has-file" ${!canUI?'disabled':''} onclick="triggerPdfUpload(${p.id},${i},'inpasa')" title="${esc(v.nfInpasaFile)}">📎 PDF</button>
-               ${canUI?`<span class="pdf-remove" onclick="removePdf(${p.id},${i},'inpasa')">✕</span>`:''}
+               <button class="pdf-btn has-file" ${!canUI?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'inpasa')" title="${esc(v.nfInpasaFile)}">📎 PDF</button>
+               ${canUI?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'inpasa')">✕</span>`:''}
              </div>`
-          : `<button class="pdf-btn" ${!canUI?'disabled':''} onclick="triggerPdfUpload(${p.id},${i},'inpasa')">📎 Anexar</button>`;
+          : `<button class="pdf-btn" ${!canUI?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'inpasa')">📎 Anexar</button>`;
 
         html += `<tr class="row-vagao">
           <td class="sub-lbl" colspan="7" style="padding-left:20px;">↳ Vagão ${i+1}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
-              oninput="handleInlineInput(${p.id},${i},'vagao',this.value)">
+              oninput="handleInlineInput('${p.id}',${i},'vagao',this.value)">
             <div id="vh-${p.id}-${i}" class="vagao-hint${vagaoBad?' show':''}">Obrigatório 7 dígitos</div>
           </div></td>
           <td><div class="pdf-cell">
             <input class="inline-input" type="text" placeholder="Nº NF" value="${esc(v.nfRetorno)}" ${!canR?'disabled':''}
-              oninput="handleInlineInput(${p.id},${i},'nfRetorno',this.value)">
+              oninput="handleInlineInput('${p.id}',${i},'nfRetorno',this.value)">
             ${retHtml}
+            ${v.nfRetornoAt ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">📅 ${v.nfRetornoAt}</div>` : ''}
           </div></td>
+          <td style="width:80px"><input class="inline-input" type="text" placeholder="Volume m³"
+            value="${esc(v.volume||'')}" ${!canR?'disabled':''}
+            oninput="handleInlineInput('${p.id}',${i},'volume',this.value)"></td>
           <td class="hide-mobile"><input class="inline-input" type="text" placeholder="Lacre" value="${esc(v.lacre)}" ${!canL?'disabled':''}
-            oninput="handleInlineInput(${p.id},${i},'lacre',this.value)"></td>
+            oninput="handleInlineInput('${p.id}',${i},'lacre',this.value)"></td>
           <td><div class="pdf-cell">
             <input class="inline-input" type="text" placeholder="Nº NF" value="${esc(v.nfInpasa)}" disabled>
             ${inpHtml}
+            ${v.nfInpasaAt ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">📅 ${v.nfInpasaAt}</div>` : ''}
           </div></td>
           <td id="st-${p.id}-${i}">${getStatusBadge(v)}</td>
           <td></td>
@@ -1863,6 +1882,27 @@ function extractNfNumber(text) {
   return null;
 }
 
+function extractVolume(text) {
+  // Captura quantidade/volume da NF — procura por padrões como "104.761,000" ou "M3" próximo a números
+  const patterns = [
+    /QTD\.?\s*COM[^\n]*?([\d.,]{5,})/i,           // QTD. COM ... 104.761,000
+    /QUANTIDADE[:\s]+([\d.,]+)/i,
+    /([\d]{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,3}))\s*M3/i, // 104.761,000 M3
+    /M3[\s\n]+([\d.,]+)/i,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) {
+      // Normaliza o número: remove pontos de milhar, troca vírgula por ponto
+      let val = m[1].trim();
+      // Se tem vírgula e ponto: formato BR (1.234,56) → 1234.56
+      if (val.includes(',')) val = val.replace(/\./g,'').replace(',','.');
+      return val;
+    }
+  }
+  return null;
+}
+
 function extractLacre(text) {
   const patterns = [
     /lacre[:\s]+([A-Z0-9\-]{4,20})/i,
@@ -1882,7 +1922,8 @@ async function processPdf(file, type) {
       const vagaoNum = extractVagaoNumber(text);
       const lacre    = extractLacre(text);
       const nfNum    = extractNfNumber(text);
-      pdfExtracted   = { type:'retorno', file, text, vagaoNum, lacre, nfNum, ctx };
+      const volume   = extractVolume(text);
+      pdfExtracted   = { type:'retorno', file, text, vagaoNum, lacre, nfNum, volume, ctx };
       document.getElementById('pdf-modal-title').textContent = 'Dados extraídos — NF de Retorno';
       document.getElementById('pdf-modal-desc').textContent  = `Arquivo: ${file.name}. Confirme os dados antes de aplicar.`;
       document.getElementById('pdf-extracted-fields').innerHTML = `
@@ -1894,6 +1935,7 @@ async function processPdf(file, type) {
           <div id="pe-vagao-hint" class="field-hint${vagaoNum&&vagaoNum.length!==7?' show':''}">O número do vagão deve ter exatamente 7 dígitos.</div>
         </div>
         <div class="form-field"><label>Número da NF de Retorno (DANFE)</label><input type="text" id="pe-nfret" value="${nfNum||''}" placeholder="Não identificado — insira manualmente"></div>
+        <div class="form-field"><label>Volume (m³)</label><input type="text" id="pe-volume" value="${volume||''}" placeholder="Ex: 104.761"></div>
         <div class="form-field"><label>Lacre</label><input type="text" id="pe-lacre" value="${lacre||''}" placeholder="Não identificado — insira manualmente"></div>`;
       const warn = document.getElementById('pdf-warn');
       if (!vagaoNum&&!lacre&&!nfNum) { warn.style.display='block'; warn.textContent='Nenhum dado identificado automaticamente. PDF pode ser escaneado. Preencha manualmente.'; }
@@ -1937,6 +1979,9 @@ async function applyPdfData() {
     if (vagaoNum) v.vagao     = digits;
     if (nfRet)    v.nfRetorno = nfRet;
     if (lacre)    v.lacre     = lacre;
+    const volVal = document.getElementById('pe-volume')?.value.trim();
+    if (volVal)   v.volume    = volVal;
+    v.nfRetornoAt  = fmtDateTime();
     v.nfRetornoFileObj = file;
     showLoading('Enviando PDF...');
     try {
@@ -1949,6 +1994,7 @@ async function applyPdfData() {
   } else {
     const nfInpasa = document.getElementById('pe-nfinpasa')?.value.trim();
     if (nfInpasa) v.nfInpasa = nfInpasa;
+    v.nfInpasaAt = fmtDateTime();
     v.nfInpasaFileObj = file;
     showLoading('Enviando PDF...');
     try {
@@ -2161,7 +2207,7 @@ async function renderUsers() {
 function exportExcel() {
   const progs = ProgAPI.list();
   if (!progs.length) { toast('Nenhuma programação para exportar.',true); return; }
-  const rows = [['Data Prog.','Nº Pedido','Produto','Usina / Filial','Cliente','Local Entrega','Total Vagões','Vagão Nº','Nº NF Retorno','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Status']];
+  const rows = [['Data Prog.','Nº Pedido','Produto','Usina / Filial','Cliente','Local Entrega','Total Vagões','Vagão Nº','Nº NF Retorno','Volume (m³)','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Anexo em','Status']];
   for (const p of progs) {
     for (let i=0; i<p.vagoes.length; i++) {
       const v=p.vagoes[i];
@@ -2169,7 +2215,7 @@ function exportExcel() {
       if ((v.nfInpasa||'').trim()) status='Concluído';
       else if ((v.nfRetorno||'').trim()) status='Ag. faturamento';
       else if ((v.vagao||'').trim()) status='Em carregamento';
-      rows.push([fmtDate(p.data),p.pedido,p.produto,p.usina,p.cliente,p.local,i===0?p.qtd:'',v.vagao||'',v.nfRetorno||'',v.lacre||'',v.nfInpasa||'',v.nfRetornoFile||'',v.nfInpasaFile||'',status]);
+      rows.push([fmtDate(p.data),p.pedido,p.produto,p.usina,p.cliente,p.local,i===0?p.qtd:'',v.vagao||'',v.nfRetorno||'',v.volume||'',v.lacre||'',v.nfInpasa||'',v.nfRetornoFile||'',v.nfInpasaFile||'',v.nfRetornoAt||'',status]);
     }
   }
   const ws = XLSX.utils.aoa_to_sheet(rows);
