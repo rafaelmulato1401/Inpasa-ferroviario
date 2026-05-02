@@ -1265,7 +1265,7 @@ const PERMS = {
 
 // Dynamic custom profiles: inherit baseRole permissions
 function getRolePerms(role) {
-  if (!role) return {};
+  if (!role || typeof role !== 'string') return {};
   if (PERMS[role]) return PERMS[role];
   const custom = (DB.customProfiles||[]).find(p => p.roleKey === role);
   if (custom && PERMS[custom.baseRole]) return PERMS[custom.baseRole];
@@ -1340,8 +1340,9 @@ async function initApp() {
     // Load custom profiles first (needed for permissions)
     await ProfilesAPI.loadAll();
     // Determine terminal filter for non-admin users
-    const tf = (!can('canSeeAll') && currentUser.role.includes('terminal_'))
-      ? getRoleDisplayName(currentUser.role) : null;
+    const userRole = currentUser.role || '';
+    const tf = (!can('canSeeAll') && typeof userRole === 'string' && userRole.includes('terminal_'))
+      ? getRoleDisplayName(userRole) : null;
     await ProgAPI.loadAll(tf);
   } catch(e) { console.error('initApp load error:', e); }
   finally { hideLoading(); }
@@ -1349,14 +1350,15 @@ async function initApp() {
   document.getElementById('topbar-user').textContent = currentUser.nome || currentUser.email;
   document.getElementById('topbar-role').textContent = getRoleDisplayName(currentUser.role);
 
-  // Debug: log current user role to console
-  console.log('✅ currentUser:', currentUser.role, '| canManageUsers:', can('canManageUsers'), '| canManageProfiles:', can('canManageProfiles'));
+  // Debug
+  console.log('✅ currentUser:', JSON.stringify(currentUser));
+  console.log('✅ role:', currentUser.role, '| canManageUsers:', can('canManageUsers'), '| canManageProfiles:', can('canManageProfiles'));
 
-  document.getElementById('btn-nova').style.display  = can('canCreateProg')     ? 'flex' : 'none';
-  document.getElementById('btn-excel').style.display = can('canDownload')        ? 'flex' : 'none';
-  document.getElementById('btn-zip').style.display   = can('canDownload')        ? 'flex' : 'none';
-  document.getElementById('tab-users').style.display    = can('canManageUsers')    ? 'flex' : 'none';
-  document.getElementById('tab-profiles').style.display = can('canManageProfiles') ? 'flex' : 'none';
+  document.getElementById('btn-nova').style.display     = can('canCreateProg')     ? 'flex' : 'none';
+  document.getElementById('btn-excel').style.display    = can('canDownload')        ? 'flex' : 'none';
+  document.getElementById('btn-zip').style.display      = can('canDownload')        ? 'flex' : 'none';
+  document.getElementById('tab-users').style.display    = can('canManageUsers')     ? 'flex' : 'none';
+  document.getElementById('tab-profiles').style.display = can('canManageProfiles')  ? 'flex' : 'none';
 
   const advFilters = document.getElementById('adv-filters');
   if (advFilters) advFilters.style.display = can('canSeeFilters') ? 'flex' : 'none';
