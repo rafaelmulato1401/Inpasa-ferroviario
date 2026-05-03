@@ -1877,11 +1877,17 @@ function renderTable() {
         const v=p.vagoes[i];
         // Per-row lock: CSC/Terminal can't edit locked dates
         const rowLocked = locked;
-        const canV  = can('canEditVagao')    && !rowLocked;
-        const canR  = can('canEditRetorno')  && !rowLocked;
-        const canL  = can('canEditLacre')    && !rowLocked;
-        const canUR = can('canUploadRetorno')&& !rowLocked;
-        const canUI = can('canUploadInpasa') && !rowLocked;
+        // Concluído lock: when NF Inpasa is filled, row is locked for all edits
+        // Master can still remove PDFs (✕) but cannot edit text fields
+        const isCompleted = !!(v.nfInpasa||'').trim();
+        const canV  = can('canEditVagao')    && !rowLocked && !isCompleted;
+        const canR  = can('canEditRetorno')  && !rowLocked && !isCompleted;
+        const canL  = can('canEditLacre')    && !rowLocked && !isCompleted;
+        const canUR = can('canUploadRetorno')&& !rowLocked && !isCompleted;
+        const canUI = can('canUploadInpasa') && !rowLocked && !isCompleted;
+        // Master can delete PDFs even on completed rows
+        const canDelRetorno = can('canManageUsers') && hasRet;
+        const canDelInpasa  = can('canManageUsers') && hasInp;
         const hasRet = !!v.nfRetornoFile;
         const hasInp = !!v.nfInpasaFile;
         const vagaoDigits = (v.vagao||'').replace(/\D/g,'');
@@ -1890,19 +1896,21 @@ function renderTable() {
         const retHtml = hasRet
           ? `<div class="pdf-file-row">
                <button class="pdf-btn has-file" ${!canUR?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'retorno')" title="${esc(v.nfRetornoFile)}">📎 PDF</button>
-               ${canUR?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'retorno')">✕</span>`:''}
+               ${canDelRetorno?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'retorno')" title="Remover PDF (Master)">✕</span>`:''}
              </div>`
           : `<button class="pdf-btn" ${!canUR?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'retorno')">📎 Anexar</button>`;
 
         const inpHtml = hasInp
           ? `<div class="pdf-file-row">
                <button class="pdf-btn has-file" ${!canUI?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'inpasa')" title="${esc(v.nfInpasaFile)}">📎 PDF</button>
-               ${canUI?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'inpasa')">✕</span>`:''}
+               ${canDelInpasa?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'inpasa')" title="Remover PDF (Master)">✕</span>`:''}
              </div>`
           : `<button class="pdf-btn" ${!canUI?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'inpasa')">📎 Anexar</button>`;
 
-        html += `<tr class="row-vagao">
-          <td class="sub-lbl" colspan="7" style="padding-left:20px;">↳ Vagão ${i+1}</td>
+        const completedStyle = isCompleted ? 'background:#f0fdf4;' : '';
+
+        html += `<tr class="row-vagao" style="${completedStyle}">
+          <td class="sub-lbl" colspan="7" style="padding-left:20px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
