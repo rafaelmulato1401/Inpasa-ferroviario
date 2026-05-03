@@ -2090,6 +2090,21 @@ function extractVolume(text) {
 }
 
 
+function extractLacre(text) {
+  const patterns = [
+    /LACRE[:\s]+([A-Z0-9\-]{4,20})/i,
+    /N[oº°]\.?\s*LACRE[:\s]+([A-Z0-9\-]{4,20})/i,
+    /LACRE\s+N[oº°]?\.?\s*([A-Z0-9\-]{4,20})/i,
+    // Padrão real das NFs: "Lacres: 3902" ou "LACRE: 3461471"
+    /Lacres?[:\s]+(\d{4,10})/i,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
 async function processPdf(file, type) {
   toast('Lendo PDF…');
   try {
