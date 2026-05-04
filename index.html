@@ -192,6 +192,10 @@ input[type=file] { display: none; }
 .btn-logout { background:rgba(255,255,255,.1); color:rgba(255,255,255,.8); border:1px solid rgba(255,255,255,.2); border-radius:6px; padding:5px 10px; font-size:11px; cursor:pointer; transition:background .15s; }
 .btn-logout:hover { background:rgba(255,255,255,.2); }
 
+.btn-profile { background:rgba(255,255,255,.1); color:rgba(255,255,255,.85); border:1px solid rgba(255,255,255,.2); border-radius:6px; padding:5px 10px; font-size:11px; cursor:pointer; transition:background .15s; display:flex; align-items:center; gap:5px; }
+.btn-profile:hover { background:rgba(255,255,255,.22); }
+
+
 /* Content */
 .content { padding:1.25rem; flex:1; }
 
@@ -556,6 +560,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
     <div class="tb-right">
       <span class="badge-role" id="topbar-role"></span>
       <span class="tb-user" id="topbar-user"></span>
+      <button class="btn-profile" onclick="openMyProfile()" title="Editar meu perfil">👤 Meu perfil</button>
       <button class="btn-logout" onclick="doLogout()">Sair</button>
     </div>
   </div>
@@ -634,13 +639,12 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th class="hide-mobile" style="width:80px">Lacre</th>
                 <th style="width:90px">NF Inpasa</th>
                 <th style="width:80px">Laudo</th>
-                <th style="width:90px">Ficha Seg.</th>
                 <th style="width:120px">Status</th>
                 <th style="width:62px">Ações</th>
               </tr>
             </thead>
             <tbody id="table-body">
-              <tr class="empty-row"><td colspan="17">Nenhuma programação cadastrada.</td></tr>
+              <tr class="empty-row"><td colspan="16">Nenhuma programação cadastrada.</td></tr>
             </tbody>
           </table>
         </div>
@@ -946,6 +950,42 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ════ MODAL: Meu Perfil ════ -->
+<div class="modal-overlay" id="modal-my-profile">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-head">
+      <div class="modal-head-left"><h3>Meu Perfil</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-my-profile')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--blue-pale);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:1rem;font-size:12px;color:var(--text-muted);">
+        Perfil: <strong id="mp-role-display" style="color:var(--blue);"></strong>
+      </div>
+      <div class="form-grid">
+        <div class="form-field full"><label>Nome completo</label><input type="text" id="mp-nome" placeholder="Seu nome"></div>
+        <div class="form-field full"><label>E-mail</label><input type="email" id="mp-email" placeholder="seu@email.com"></div>
+        <div class="form-field full"><label>Empresa</label><input type="text" id="mp-empresa" placeholder="Sua empresa"></div>
+        <div class="form-field full"><label>Palavra de segurança</label><input type="text" id="mp-palavra" placeholder="Usada para redefinir senha"></div>
+        <div class="form-field full">
+          <label>Nova senha <span style="font-weight:400;font-size:10px;color:var(--text-muted);">(deixe vazio para manter a atual)</span></label>
+          <input type="password" id="mp-pass" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="form-field full">
+          <label>Confirmar nova senha</label>
+          <input type="password" id="mp-pass2" placeholder="Repita a nova senha">
+        </div>
+      </div>
+      <div id="mp-err" style="font-size:11px;color:var(--red);margin-top:8px;display:none;"></div>
+      <div id="mp-ok" style="font-size:11px;color:var(--green);margin-top:8px;display:none;">✅ Perfil atualizado com sucesso!</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-my-profile')">Fechar</button>
+      <button class="btn-ok" onclick="saveMyProfile()">Salvar alterações</button>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="fi-nf-retorno" accept=".pdf">
 <input type="file" id="fi-doc-upload" accept=".pdf,.jpg,.jpeg,.png">
 <input type="file" id="fi-nf-inpasa" accept=".pdf">
@@ -1888,7 +1928,7 @@ function renderTable() {
   fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
 
   if (!progs.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="17">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="16">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
     return;
   }
 
@@ -1920,10 +1960,6 @@ function renderTable() {
         </div>
       </td>
       <td><!-- Laudo col (per vagão, empty on prog row) --></td>
-      <td>
-        <!-- Ficha de Segurança: automática pelo produto -->
-        <div class="pdf-cell">${getFichaButtons(p)}</div>
-      </td>
     </tr>`;
 
     if (!p.collapsed) {
@@ -1999,7 +2035,6 @@ function renderTable() {
               }
             </div>` : ''}
           </td>
-          <td><!-- Ficha Seg. (per prog, empty on vagão row) --></td>
           <td id="st-${p.id}-${i}">${getStatusBadge(v)}</td>
           <td></td>
         </tr>`;
@@ -2555,6 +2590,80 @@ async function renderUsers() {
 
 
 
+
+// ══════════════════════════════════════════
+// MEU PERFIL — usuário edita o próprio cadastro
+// ══════════════════════════════════════════
+function openMyProfile() {
+  if (!currentUser) return;
+  document.getElementById('mp-nome').value    = currentUser.nome    || '';
+  document.getElementById('mp-email').value   = currentUser.email   || '';
+  document.getElementById('mp-empresa').value = currentUser.empresa || '';
+  document.getElementById('mp-palavra').value = currentUser.palavraSeguranca || '';
+  document.getElementById('mp-pass').value    = '';
+  document.getElementById('mp-pass2').value   = '';
+  document.getElementById('mp-role-display').textContent = getRoleDisplayName(currentUser.role);
+  document.getElementById('mp-err').style.display = 'none';
+  document.getElementById('mp-ok').style.display  = 'none';
+  openModal('modal-my-profile');
+}
+
+async function saveMyProfile() {
+  const nome    = document.getElementById('mp-nome').value.trim();
+  const email   = document.getElementById('mp-email').value.trim();
+  const empresa = document.getElementById('mp-empresa').value.trim();
+  const palavra = document.getElementById('mp-palavra').value.trim();
+  const pass    = document.getElementById('mp-pass').value;
+  const pass2   = document.getElementById('mp-pass2').value;
+  const err     = document.getElementById('mp-err');
+  const ok      = document.getElementById('mp-ok');
+
+  err.style.display = 'none';
+  ok.style.display  = 'none';
+
+  if (!nome || !email) { err.textContent = 'Nome e e-mail são obrigatórios.'; err.style.display='block'; return; }
+  if (pass && pass.length < 6) { err.textContent = 'A nova senha deve ter ao menos 6 caracteres.'; err.style.display='block'; return; }
+  if (pass && pass !== pass2)  { err.textContent = 'As senhas não coincidem.'; err.style.display='block'; return; }
+
+  showLoading('Salvando perfil...');
+  try {
+    const fields = { nome, email, empresa, palavraSeguranca: palavra };
+    await AuthAPI.updateUser(currentUser.uid, fields);
+
+    // Update local currentUser
+    currentUser.nome            = nome;
+    currentUser.email           = email;
+    currentUser.empresa         = empresa;
+    currentUser.palavraSeguranca = palavra;
+
+    // Update topbar
+    document.getElementById('topbar-user').textContent = nome || email;
+
+    // If password change requested — use Firebase Auth
+    if (pass) {
+      try {
+        await auth.currentUser.updatePassword(pass);
+        window._masterPass = pass; // keep in memory for re-auth
+      } catch(e) {
+        // If requires re-auth, show specific message
+        if (e.code === 'auth/requires-recent-login') {
+          err.textContent = 'Para alterar a senha, faça logout e login novamente antes.';
+          err.style.display = 'block';
+          hideLoading();
+          return;
+        }
+        throw e;
+      }
+    }
+
+    ok.style.display = 'block';
+    toast('Perfil atualizado com sucesso!');
+  } catch(e) {
+    err.textContent = 'Erro ao salvar: ' + (e.message || e);
+    err.style.display = 'block';
+  } finally { hideLoading(); }
+}
+
 // ══════════════════════════════════════════
 // FICHAS DE SEGURANÇA — AUTOMÁTICAS POR PRODUTO
 // Armazenadas no GitHub repo em /fichas/
@@ -2673,7 +2782,7 @@ async function removeVagaoDoc(progId, vagaoIdx, type) {
 function exportExcel() {
   const progs = ProgAPI.list();
   if (!progs.length) { toast('Nenhuma programação para exportar.',true); return; }
-  const rows = [['Data Prog.','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Total Vagões','Vagão Nº','Nº NF Retorno','Volume (m³)','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Anexo em','Fichas Disponíveis','Status']];
+  const rows = [['Data Prog.','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Total Vagões','Vagão Nº','Nº NF Retorno','Volume (m³)','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Anexo em','Status']];
   for (const p of progs) {
     for (let i=0; i<p.vagoes.length; i++) {
       const v=p.vagoes[i];
@@ -2681,7 +2790,7 @@ function exportExcel() {
       if ((v.nfInpasa||'').trim()) status='Concluído';
       else if ((v.nfRetorno||'').trim()) status='Ag. faturamento';
       else if ((v.vagao||'').trim()) status='Em carregamento';
-      rows.push([fmtDate(p.data),p.pedido,p.encoste||'',p.produto,p.usina,p.cliente,p.local,p.terminal||'',i===0?p.qtd:'',v.vagao||'',v.nfRetorno||'',v.volume||'',v.lacre||'',v.nfInpasa||'',v.nfRetornoFile||'',v.nfInpasaFile||'',v.nfRetornoAt||'',(FICHA_MAP[p.produto]||[]).map(f=>f.label).join(' / ')||'',status]);
+      rows.push([fmtDate(p.data),p.pedido,p.encoste||'',p.produto,p.usina,p.cliente,p.local,p.terminal||'',i===0?p.qtd:'',v.vagao||'',v.nfRetorno||'',v.volume||'',v.lacre||'',v.nfInpasa||'',v.nfRetornoFile||'',v.nfInpasaFile||'',v.nfRetornoAt||'',status]);
     }
   }
   const ws = XLSX.utils.aoa_to_sheet(rows);
