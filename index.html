@@ -622,6 +622,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
               <tr>
                 <th>Data</th>
                 <th>Nº Pedido</th>
+                <th style="width:90px">Encoste</th>
                 <th class="hide-mobile">Produto</th>
                 <th class="hide-mobile">Usina/Filial</th>
                 <th class="hide-mobile">Cliente</th>
@@ -639,7 +640,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
               </tr>
             </thead>
             <tbody id="table-body">
-              <tr class="empty-row"><td colspan="16">Nenhuma programação cadastrada.</td></tr>
+              <tr class="empty-row"><td colspan="17">Nenhuma programação cadastrada.</td></tr>
             </tbody>
           </table>
         </div>
@@ -754,6 +755,15 @@ tbody tr { border-bottom:1px solid #edf0f8; }
           <label>Terminal responsável</label>
           <select id="f-terminal">
             <option value="">Nenhum (visível a todos)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Encoste</label>
+          <select id="f-encoste">
+            <option value="">Não informado</option>
+            <option value="1º Encoste">1º Encoste</option>
+            <option value="2º Encoste">2º Encoste</option>
+            <option value="3º Encoste">3º Encoste</option>
           </select>
         </div>
         <div class="form-field"><label>Quantidade de vagões</label><input type="number" id="f-vagoes" min="1" max="99" placeholder="Ex: 5"></div>
@@ -1673,6 +1683,7 @@ function openProgModal(progId=null) {
     document.getElementById('f-cliente').value   = p.cliente;
     document.getElementById('f-local').value     = p.local;
     document.getElementById('f-terminal').value  = p.terminal||'';
+    document.getElementById('f-encoste').value   = p.encoste||'';
     document.getElementById('f-vagoes').value    = p.qtd;
     document.getElementById('f-vagoes').disabled = true;
   } else {
@@ -1680,6 +1691,7 @@ function openProgModal(progId=null) {
     document.getElementById('f-produto').selectedIndex  = 0;
     document.getElementById('f-usina').selectedIndex    = 0;
     document.getElementById('f-terminal').selectedIndex = 0;
+    document.getElementById('f-encoste').selectedIndex  = 0;
     document.getElementById('f-cliente').selectedIndex  = 0;
     document.getElementById('f-local').selectedIndex    = 0;
     document.getElementById('f-vagoes').disabled=false;
@@ -1695,15 +1707,16 @@ async function saveProg() {
   const cliente  = document.getElementById('f-cliente').value.trim();
   const local    = document.getElementById('f-local').value.trim();
   const terminal = document.getElementById('f-terminal').value.trim();
+  const encoste  = document.getElementById('f-encoste').value.trim();
   const qtd      = parseInt(document.getElementById('f-vagoes').value);
   if (!data||!pedido||!produto||!usina||!cliente||!local||!qtd) { toast('Preencha todos os campos.',true); return; }
   showLoading('Salvando...');
   try {
     if (editingProgId) {
-      await ProgAPI.update(editingProgId,{data,pedido,produto,usina,cliente,local,terminal});
+      await ProgAPI.update(editingProgId,{data,pedido,produto,usina,cliente,local,terminal,encoste});
       toast('Programação atualizada.');
     } else {
-      await ProgAPI.create({data,pedido,produto,usina,cliente,local,terminal,qtd});
+      await ProgAPI.create({data,pedido,produto,usina,cliente,local,terminal,encoste,qtd});
       toast('Programação criada com sucesso.');
     }
     const tf = (!can('canSeeAll') && currentUser.role.includes('terminal_'))
@@ -1875,7 +1888,7 @@ function renderTable() {
   fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
 
   if (!progs.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="16">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="17">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
     return;
   }
 
@@ -1890,13 +1903,14 @@ function renderTable() {
     html += `<tr class="row-prog">
       <td><span class="expand-btn" onclick="toggleCollapse('${p.id}')">${arrow}</span>${fmtDate(p.data)}${lockNote}</td>
       <td>${esc(p.pedido)}</td>
+      <td>${p.encoste ? `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#e0f2fe;color:#0369a1;">${esc(p.encoste)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}</td>
       <td class="hide-mobile">${esc(p.produto)}</td>
       <td class="hide-mobile">${esc(p.usina)}</td>
       <td class="hide-mobile">${esc(p.cliente)}</td>
       <td class="hide-mobile">${esc(p.local)}</td>
       <td class="hide-mobile">${p.terminal ? `<span class="terminal-badge">${esc(p.terminal)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}</td>
       <td style="text-align:center;">${p.qtd}</td>
-      <td colspan="6" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
+      <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
       <td></td>
       <td></td>
       <td>
@@ -1907,17 +1921,8 @@ function renderTable() {
       </td>
       <td><!-- Laudo col (per vagão, empty on prog row) --></td>
       <td>
-        <!-- Ficha de Segurança: per-programação, CSC and master can upload -->
-        ${(can('canUploadInpasa')||can('canManageUsers')) ? `<div class="pdf-cell">
-          ${p.fichaFile
-            ? `<div class="pdf-file-row">
-                <button class="doc-btn has-file" onclick="triggerDocUpload('${p.id}','ficha')" title="${esc(p.fichaFile)}">📄 Ficha</button>
-                ${can('canManageUsers') ? `<span class="pdf-remove" onclick="removeProgDoc('${p.id}','ficha')" title="Remover">✕</span>` : ''}
-               </div>
-               ${p.fichaAt ? `<div style="font-size:9px;color:var(--text-muted);">📅 ${p.fichaAt}</div>` : ''}`
-            : `<button class="doc-btn" onclick="triggerDocUpload('${p.id}','ficha')">📄 Ficha Seg.</button>`
-          }
-        </div>` : ''}
+        <!-- Ficha de Segurança: automática pelo produto -->
+        <div class="pdf-cell">${getFichaButtons(p)}</div>
       </td>
     </tr>`;
 
@@ -1958,7 +1963,7 @@ function renderTable() {
         const completedStyle = isCompleted ? 'background:#f0fdf4;' : '';
 
         html += `<tr class="row-vagao" style="${completedStyle}">
-          <td class="sub-lbl" colspan="8" style="padding-left:20px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
+          <td class="sub-lbl" colspan="9" style="padding-left:20px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
@@ -2549,6 +2554,46 @@ async function renderUsers() {
 }
 
 
+
+// ══════════════════════════════════════════
+// FICHAS DE SEGURANÇA — AUTOMÁTICAS POR PRODUTO
+// Armazenadas no GitHub repo em /fichas/
+// URL base: mesmo repositório do app (Vercel serve os arquivos estáticos)
+// ══════════════════════════════════════════
+const FICHA_BASE_URL = '/fichas/'; // pasta no repo GitHub
+
+const FICHA_MAP = {
+  '412 - ALCOOL HIDRATADO': [
+    { label: 'Ficha PT', file: 'ficha_hidratado_pt.pdf' },
+    { label: 'Ficha EN', file: 'ficha_hidratado_en.pdf' },
+  ],
+  '414 - ALCOOL ANIDRO': [
+    { label: 'Ficha PT', file: 'ficha_anidro_pt.pdf' },
+    { label: 'Ficha EN', file: 'ficha_anidro_en.pdf' },
+  ],
+};
+
+function getFichaButtons(prog) {
+  const fichas = FICHA_MAP[prog.produto];
+  if (!fichas || !fichas.length) return '<span style="font-size:10px;color:var(--text-muted);">—</span>';
+  return fichas.map(f => `
+    <a href="${FICHA_BASE_URL}${f.file}" target="_blank" download="${f.file}"
+       class="doc-btn has-file" style="text-decoration:none;margin-bottom:2px;display:inline-flex;">
+      📄 ${f.label}
+    </a>
+  `).join('');
+}
+
+function downloadFicha(filename) {
+  const a = document.createElement('a');
+  a.href = FICHA_BASE_URL + filename;
+  a.download = filename;
+  a.target = '_blank';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 // ══════════════════════════════════════════
 // EXPAND / COLLAPSE ALL
 // ══════════════════════════════════════════
@@ -2628,7 +2673,7 @@ async function removeVagaoDoc(progId, vagaoIdx, type) {
 function exportExcel() {
   const progs = ProgAPI.list();
   if (!progs.length) { toast('Nenhuma programação para exportar.',true); return; }
-  const rows = [['Data Prog.','Nº Pedido','Produto','Usina / Filial','Cliente','Local Entrega','Total Vagões','Vagão Nº','Nº NF Retorno','Volume (m³)','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Anexo em','Status']];
+  const rows = [['Data Prog.','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Total Vagões','Vagão Nº','Nº NF Retorno','Volume (m³)','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Anexo em','Fichas Disponíveis','Status']];
   for (const p of progs) {
     for (let i=0; i<p.vagoes.length; i++) {
       const v=p.vagoes[i];
@@ -2636,7 +2681,7 @@ function exportExcel() {
       if ((v.nfInpasa||'').trim()) status='Concluído';
       else if ((v.nfRetorno||'').trim()) status='Ag. faturamento';
       else if ((v.vagao||'').trim()) status='Em carregamento';
-      rows.push([fmtDate(p.data),p.pedido,p.produto,p.usina,p.cliente,p.local,i===0?p.qtd:'',v.vagao||'',v.nfRetorno||'',v.volume||'',v.lacre||'',v.nfInpasa||'',v.nfRetornoFile||'',v.nfInpasaFile||'',v.nfRetornoAt||'',status]);
+      rows.push([fmtDate(p.data),p.pedido,p.encoste||'',p.produto,p.usina,p.cliente,p.local,p.terminal||'',i===0?p.qtd:'',v.vagao||'',v.nfRetorno||'',v.volume||'',v.lacre||'',v.nfInpasa||'',v.nfRetornoFile||'',v.nfInpasaFile||'',v.nfRetornoAt||'',(FICHA_MAP[p.produto]||[]).map(f=>f.label).join(' / ')||'',status]);
     }
   }
   const ws = XLSX.utils.aoa_to_sheet(rows);
