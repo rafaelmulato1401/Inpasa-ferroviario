@@ -337,6 +337,22 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 .btn-del-user { background:none; border:1px solid #fca5a5; border-radius:6px; padding:5px 8px; font-size:11px; color:var(--red); cursor:pointer; font-weight:600; transition:all .12s; }
 .btn-del-user:hover { background:#fee2e2; }
 
+
+/* Expand/Collapse all + sort buttons */
+.tbl-ctrl-bar { display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+.btn-tbl-ctrl { background:var(--white); border:1px solid var(--border); border-radius:6px; padding:5px 11px; font-size:11px; color:var(--blue); cursor:pointer; font-weight:600; transition:all .12s; white-space:nowrap; }
+.btn-tbl-ctrl:hover { background:var(--blue-light); border-color:var(--blue); }
+.btn-tbl-ctrl.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+
+/* Terminal badge on prog row */
+.terminal-badge { display:inline-block; font-size:9px; font-weight:700; background:var(--blue-light); color:var(--blue); border-radius:4px; padding:1px 6px; margin-left:5px; vertical-align:middle; }
+
+/* Laudo / Ficha de segurança buttons */
+.doc-btn { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:5px; font-size:10px; font-weight:600; cursor:pointer; border:1.5px solid var(--border); background:var(--white); color:var(--gray); transition:all .12s; white-space:nowrap; }
+.doc-btn:hover { background:var(--blue-light); border-color:var(--blue); color:var(--blue); }
+.doc-btn.has-file { border-color:#7c3aed; color:#7c3aed; background:#ede9f8; }
+.doc-btn:disabled { opacity:.4; cursor:not-allowed; }
+
 /* Toast */
 .toast { position:fixed; bottom:20px; right:20px; z-index:9999; background:var(--blue); color:var(--white); padding:10px 16px; border-radius:8px; font-size:12px; box-shadow:0 4px 20px rgba(0,0,0,.2); transform:translateY(20px); opacity:0; transition:all .25s; pointer-events:none; max-width:280px; }
 .toast.show { transform:translateY(0); opacity:1; }
@@ -590,6 +606,15 @@ tbody tr { border-bottom:1px solid #edf0f8; }
         <span class="filter-count" id="filter-count"></span>
       </div>
 
+      <div class="tbl-ctrl-bar">
+        <button class="btn-tbl-ctrl" onclick="expandAll()" title="Expandir todas as programações">▼ Expandir tudo</button>
+        <button class="btn-tbl-ctrl" onclick="collapseAll()" title="Recolher todas as programações">▶ Recolher tudo</button>
+        <span style="width:1px;height:18px;background:var(--border);display:inline-block;margin:0 4px;"></span>
+        <button class="btn-tbl-ctrl" onclick="sortTable('data')" id="sort-data" title="Ordenar por data">📅 Data</button>
+        <button class="btn-tbl-ctrl" onclick="sortTable('pedido')" id="sort-pedido" title="Ordenar por pedido">🔢 Pedido</button>
+        <button class="btn-tbl-ctrl" onclick="sortTable('usina')" id="sort-usina" title="Ordenar por usina">🏭 Usina</button>
+        <button class="btn-tbl-ctrl" onclick="sortTable('terminal')" id="sort-terminal" title="Ordenar por terminal">🚉 Terminal</button>
+      </div>
       <div class="table-card">
         <div class="table-wrap">
           <table>
@@ -601,17 +626,20 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th class="hide-mobile">Usina/Filial</th>
                 <th class="hide-mobile">Cliente</th>
                 <th class="hide-mobile">Local entrega</th>
+                <th class="hide-mobile" style="width:90px">Terminal</th>
                 <th style="text-align:center;width:50px">Vag.</th>
                 <th style="width:100px">Vagão Nº</th>
                 <th style="width:90px">NF Retorno</th><th style="width:80px">Volume (m³)</th>
                 <th class="hide-mobile" style="width:80px">Lacre</th>
                 <th style="width:90px">NF Inpasa</th>
+                <th style="width:80px">Laudo</th>
+                <th style="width:90px">Ficha Seg.</th>
                 <th style="width:120px">Status</th>
                 <th style="width:62px">Ações</th>
               </tr>
             </thead>
             <tbody id="table-body">
-              <tr class="empty-row"><td colspan="13">Nenhuma programação cadastrada.</td></tr>
+              <tr class="empty-row"><td colspan="16">Nenhuma programação cadastrada.</td></tr>
             </tbody>
           </table>
         </div>
@@ -909,6 +937,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 
 <div class="toast" id="toast"></div>
 <input type="file" id="fi-nf-retorno" accept=".pdf">
+<input type="file" id="fi-doc-upload" accept=".pdf,.jpg,.jpeg,.png">
 <input type="file" id="fi-nf-inpasa" accept=".pdf">
 
 
@@ -1099,8 +1128,11 @@ const ProgAPI = {
         nfRetornoPath:null, nfInpasaPath:null,
         nfRetornoUrl:null,  nfInpasaUrl:null,
         nfRetornoAt:null, nfInpasaAt:null,
+        laudoFile:null, laudoAt:null, laudoFileObj:null,
         ...v
       }));
+      // Init ficha fields on prog
+      if (!('fichaFile' in p)) { p.fichaFile = null; p.fichaAt = null; p.fichaFileObj = null; }
     }));
     return DB.programacoes;
   },
@@ -1720,6 +1752,7 @@ async function saveVagaoField(progId, idx) {
       nfRetornoFile:v.nfRetornoFile||null, nfRetornoPath:v.nfRetornoPath||null, nfRetornoUrl:v.nfRetornoUrl||null,
       nfInpasaFile:v.nfInpasaFile||null,  nfInpasaPath:v.nfInpasaPath||null,  nfInpasaUrl:v.nfInpasaUrl||null,
       nfRetornoAt:v.nfRetornoAt||null, nfInpasaAt:v.nfInpasaAt||null,
+      laudoFile:v.laudoFile||null, laudoAt:v.laudoAt||null,
     });
   } catch(e) { console.error('saveVagaoField:', e); }
 }
@@ -1842,7 +1875,7 @@ function renderTable() {
   fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
 
   if (!progs.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="14">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="16">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
     return;
   }
 
@@ -1861,14 +1894,30 @@ function renderTable() {
       <td class="hide-mobile">${esc(p.usina)}</td>
       <td class="hide-mobile">${esc(p.cliente)}</td>
       <td class="hide-mobile">${esc(p.local)}</td>
+      <td class="hide-mobile">${p.terminal ? `<span class="terminal-badge">${esc(p.terminal)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}</td>
       <td style="text-align:center;">${p.qtd}</td>
-      <td colspan="5" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
+      <td colspan="6" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
+      <td></td>
       <td></td>
       <td>
         <div class="action-icons">
           <button class="icon-btn" title="Editar" onclick="openProgModal('${p.id}')" ${(!canEdit||locked)?'disabled':''}>✏️</button>
           <button class="icon-btn del" title="Excluir" onclick="openDeleteModal('${p.id}')" ${(!canDel||locked)?'disabled':''}>🗑️</button>
         </div>
+      </td>
+      <td><!-- Laudo col (per vagão, empty on prog row) --></td>
+      <td>
+        <!-- Ficha de Segurança: per-programação, CSC and master can upload -->
+        ${(can('canUploadInpasa')||can('canManageUsers')) ? `<div class="pdf-cell">
+          ${p.fichaFile
+            ? `<div class="pdf-file-row">
+                <button class="doc-btn has-file" onclick="triggerDocUpload('${p.id}','ficha')" title="${esc(p.fichaFile)}">📄 Ficha</button>
+                ${can('canManageUsers') ? `<span class="pdf-remove" onclick="removeProgDoc('${p.id}','ficha')" title="Remover">✕</span>` : ''}
+               </div>
+               ${p.fichaAt ? `<div style="font-size:9px;color:var(--text-muted);">📅 ${p.fichaAt}</div>` : ''}`
+            : `<button class="doc-btn" onclick="triggerDocUpload('${p.id}','ficha')">📄 Ficha Seg.</button>`
+          }
+        </div>` : ''}
       </td>
     </tr>`;
 
@@ -1909,7 +1958,7 @@ function renderTable() {
         const completedStyle = isCompleted ? 'background:#f0fdf4;' : '';
 
         html += `<tr class="row-vagao" style="${completedStyle}">
-          <td class="sub-lbl" colspan="7" style="padding-left:20px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
+          <td class="sub-lbl" colspan="8" style="padding-left:20px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
@@ -1932,6 +1981,20 @@ function renderTable() {
             ${inpHtml}
             ${v.nfInpasaAt ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">📅 ${v.nfInpasaAt}</div>` : ''}
           </div></td>
+          <td>
+            <!-- Laudo: per-vagão, CSC and master can upload -->
+            ${(can('canUploadInpasa')||can('canManageUsers')) ? `<div class="pdf-cell">
+              ${v.laudoFile
+                ? `<div class="pdf-file-row">
+                    <button class="doc-btn has-file" onclick="triggerDocUpload('${p.id}','laudo',${i})" title="${esc(v.laudoFile)}">📋 Laudo</button>
+                    ${can('canManageUsers') ? `<span class="pdf-remove" onclick="removeVagaoDoc('${p.id}',${i},'laudo')" title="Remover">✕</span>` : ''}
+                   </div>
+                   ${v.laudoAt ? `<div style="font-size:9px;color:var(--text-muted);">📅 ${v.laudoAt}</div>` : ''}`
+                : `<button class="doc-btn" onclick="triggerDocUpload('${p.id}','laudo',${i})">📋 Laudo</button>`
+              }
+            </div>` : ''}
+          </td>
+          <td><!-- Ficha Seg. (per prog, empty on vagão row) --></td>
           <td id="st-${p.id}-${i}">${getStatusBadge(v)}</td>
           <td></td>
         </tr>`;
@@ -1977,6 +2040,33 @@ function triggerPdfUpload(progId, vagaoIdx, type) {
   input.value=''; input.click();
 }
 document.getElementById('fi-nf-retorno').addEventListener('change', e => { if (e.target.files[0]) processPdf(e.target.files[0],'retorno'); });
+document.getElementById('fi-doc-upload').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file || !_docCtx) return;
+  const ctx = _docCtx;
+  showLoading('Salvando documento...');
+  try {
+    const at = fmtDateTime();
+    if (ctx.vagaoIdx !== null) {
+      // Laudo: per vagão
+      const prog = ProgAPI.list().find(p => p.id === ctx.progId);
+      if (!prog) return;
+      const v = prog.vagoes[ctx.vagaoIdx];
+      v.laudoFile = file.name; v.laudoAt = at; v.laudoFileObj = file;
+      if (v.vid) await ProgAPI.updateVagao(ctx.progId, v.vid, { laudoFile: file.name, laudoAt: at });
+      toast('Laudo anexado: ' + file.name);
+    } else {
+      // Ficha de Segurança: per programação
+      const prog = ProgAPI.list().find(p => p.id === ctx.progId);
+      if (!prog) return;
+      prog.fichaFile = file.name; prog.fichaAt = at; prog.fichaFileObj = file;
+      await ProgAPI.update(ctx.progId, { fichaFile: file.name, fichaAt: at });
+      toast('Ficha de segurança anexada: ' + file.name);
+    }
+    renderTable();
+  } catch(e) { toast('Erro ao salvar: ' + e.message, true); }
+  finally { hideLoading(); _docCtx = null; }
+});
 document.getElementById('fi-nf-inpasa').addEventListener('change',  e => { if (e.target.files[0]) processPdf(e.target.files[0],'inpasa');  });
 
 async function extractPdfText(file) {
@@ -2456,6 +2546,80 @@ async function renderUsers() {
   }</div>`;
   updatePendingBadge();
   populateRoleSelects();
+}
+
+
+// ══════════════════════════════════════════
+// EXPAND / COLLAPSE ALL
+// ══════════════════════════════════════════
+function expandAll() {
+  ProgAPI.list().forEach(p => p.collapsed = false);
+  renderTable();
+}
+function collapseAll() {
+  ProgAPI.list().forEach(p => p.collapsed = true);
+  renderTable();
+}
+
+// ══════════════════════════════════════════
+// SORT TABLE
+// ══════════════════════════════════════════
+let _sortField = 'data';
+let _sortDir   = 1; // 1=asc, -1=desc
+
+function sortTable(field) {
+  if (_sortField === field) _sortDir *= -1;
+  else { _sortField = field; _sortDir = 1; }
+
+  // Update button states
+  document.querySelectorAll('.btn-tbl-ctrl[id^="sort-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('sort-' + field);
+  if (btn) btn.classList.add('active');
+
+  DB.programacoes.sort((a, b) => {
+    const av = (a[field] || '').toString().toLowerCase();
+    const bv = (b[field] || '').toString().toLowerCase();
+    return av < bv ? -_sortDir : av > bv ? _sortDir : 0;
+  });
+  renderTable();
+}
+
+// ══════════════════════════════════════════
+// DOCUMENT UPLOAD (Laudo per vagão / Ficha por programação)
+// ══════════════════════════════════════════
+let _docCtx = null; // { progId, vagaoIdx (null=prog level), type }
+
+function triggerDocUpload(progId, type, vagaoIdx = null) {
+  _docCtx = { progId, type, vagaoIdx };
+  const input = document.getElementById('fi-doc-upload');
+  input.value = '';
+  input.click();
+}
+
+async function removeProgDoc(progId, type) {
+  const prog = ProgAPI.list().find(p => p.id === progId);
+  if (!prog) return;
+  showLoading('Removendo documento...');
+  try {
+    prog.fichaFile = null; prog.fichaAt = null;
+    await ProgAPI.update(progId, { fichaFile: null, fichaAt: null });
+    renderTable(); toast('Ficha de segurança removida.');
+  } catch(e) { toast('Erro: ' + e.message, true); }
+  finally { hideLoading(); }
+}
+
+async function removeVagaoDoc(progId, vagaoIdx, type) {
+  const prog = ProgAPI.list().find(p => p.id === progId);
+  if (!prog) return;
+  const v = prog.vagoes[vagaoIdx];
+  if (!v) return;
+  showLoading('Removendo documento...');
+  try {
+    v.laudoFile = null; v.laudoAt = null;
+    if (v.vid) await ProgAPI.updateVagao(progId, v.vid, { laudoFile: null, laudoAt: null });
+    renderTable(); toast('Laudo removido.');
+  } catch(e) { toast('Erro: ' + e.message, true); }
+  finally { hideLoading(); }
 }
 
 // ══════════════════════════════════════════
