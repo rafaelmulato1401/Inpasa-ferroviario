@@ -1878,8 +1878,9 @@ function renderTable() {
         // Per-row lock: CSC/Terminal can't edit locked dates
         const rowLocked = locked;
         // Concluído lock: when NF Inpasa is filled, row is locked for all edits
-        // Master can still remove PDFs (✕) but cannot edit text fields
         const isCompleted = !!(v.nfInpasa||'').trim();
+        const hasRet = !!v.nfRetornoFile;
+        const hasInp = !!v.nfInpasaFile;
         const canV  = can('canEditVagao')    && !rowLocked && !isCompleted;
         const canR  = can('canEditRetorno')  && !rowLocked && !isCompleted;
         const canL  = can('canEditLacre')    && !rowLocked && !isCompleted;
@@ -1888,8 +1889,6 @@ function renderTable() {
         // Master can delete PDFs even on completed rows
         const canDelRetorno = can('canManageUsers') && hasRet;
         const canDelInpasa  = can('canManageUsers') && hasInp;
-        const hasRet = !!v.nfRetornoFile;
-        const hasInp = !!v.nfInpasaFile;
         const vagaoDigits = (v.vagao||'').replace(/\D/g,'');
         const vagaoBad = v.vagao!=='' && vagaoDigits.length!==7;
 
