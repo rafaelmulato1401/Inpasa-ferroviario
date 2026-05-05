@@ -581,8 +581,6 @@ tbody tr { border-bottom:1px solid #edf0f8; }
           <div class="gold-bar"></div>
         </div>
         <div class="ch-right">
-          <button class="btn-secondary" id="btn-zip" onclick="exportZip()" style="display:none;">📦 Baixar arquivos</button>
-          <button class="btn-secondary" id="btn-excel" onclick="exportExcel()" style="display:none;">⬇ Excel</button>
           <button class="btn-primary" id="btn-nova" onclick="openProgModal()" style="display:none;"><span>+</span> Nova programação</button>
         </div>
       </div>
@@ -862,11 +860,16 @@ tbody tr { border-bottom:1px solid #edf0f8; }
       <div class="form-grid">
         <div class="form-field full">
           <label>Perfil de acesso</label>
-          <select id="ap-role">
+          <select id="ap-role" onchange="toggleTerminalName('ap')">
             <option value="master">Master</option>
             <option value="terminal" selected>Terminal</option>
             <option value="csc">CSC</option>
+            <option value="rumo">Rumo</option>
           </select>
+        </div>
+        <div class="form-field full" id="ap-terminalname-wrap" style="display:none;">
+          <label>Nome do Terminal <span style="font-weight:400;font-size:10px;color:var(--text-muted);">(ex: Teciap, Ultracargo)</span></label>
+          <input type="text" id="ap-terminalname" placeholder="Ex: Teciap">
         </div>
         <div class="form-field full">
           <label>Senha inicial (pode alterar)</label>
@@ -898,11 +901,16 @@ tbody tr { border-bottom:1px solid #edf0f8; }
         <div class="form-field full"><label>E-mail</label><input type="email" id="eu-email" placeholder="email@empresa.com.br"></div>
         <div class="form-field">
           <label>Perfil de acesso</label>
-          <select id="eu-role">
+          <select id="eu-role" onchange="toggleTerminalName('eu')">
             <option value="master">Master</option>
             <option value="terminal">Terminal</option>
             <option value="csc">CSC</option>
+            <option value="rumo">Rumo</option>
           </select>
+        </div>
+        <div class="form-field" id="eu-terminalname-wrap" style="display:none;">
+          <label>Nome do Terminal <span style="font-weight:400;font-size:10px;color:var(--text-muted);">(ex: Teciap, Ultracargo)</span></label>
+          <input type="text" id="eu-terminalname" placeholder="Ex: Teciap">
         </div>
         <div class="form-field">
           <label>Nova senha <span style="font-weight:400;font-size:10px;color:var(--text-muted);">(deixe vazio para manter)</span></label>
@@ -1157,9 +1165,9 @@ const AuthAPI = {
   },
 
   // Approve pending user
-  async approveUser(uid, role, pass) {
-    await db.collection('users').doc(uid).update({ role, active: true });
-    // Update password via Auth REST API (simplified: admin-side)
+  async approveUser(uid, role, pass, terminalName) {
+    const upd = { role, active: true, terminalName: terminalName || '' };
+    await db.collection('users').doc(uid).update(upd);
     return { ok: true };
   },
 
@@ -1614,9 +1622,16 @@ async function initApp() {
     // Load custom profiles first (needed for permissions)
     await ProfilesAPI.loadAll();
     // Determine terminal filter for non-admin users
-    const userRole = currentUser.role || '';
-    const tf = (!can('canSeeAll') && typeof userRole === 'string' && userRole.includes('terminal_'))
-      ? getRoleDisplayName(userRole) : null;
+    // Uses terminalName field stored in Firestore user profile (set by Master)
+    let tf = null;
+    if (!can('canSeeAll')) {
+      tf = (currentUser.terminalName || '').trim() || null;
+      // Fallback: derive from custom role key if terminalName not set
+      if (!tf && (currentUser.role||'').startsWith('terminal_')) {
+        tf = getRoleDisplayName(currentUser.role);
+      }
+      console.log('Terminal filter applied:', tf);
+    }
     await ProgAPI.loadAll(tf);
     if (can('canViewPrevisao')) await PrevisaoAPI.loadAll();
   } catch(e) { console.error('initApp load error:', e); }
@@ -1630,8 +1645,7 @@ async function initApp() {
   console.log('✅ role:', currentUser.role, '| canManageUsers:', can('canManageUsers'), '| canManageProfiles:', can('canManageProfiles'));
 
   document.getElementById('btn-nova').style.display     = can('canCreateProg')     ? 'flex' : 'none';
-  document.getElementById('btn-excel').style.display    = can('canDownload')        ? 'flex' : 'none';
-  document.getElementById('btn-zip').style.display      = can('canDownload')        ? 'flex' : 'none';
+  // Per-row download buttons are controlled in renderTable — no global buttons
   document.getElementById('tab-users').style.display    = can('canManageUsers')     ? 'flex' : 'none';
   document.getElementById('tab-profiles').style.display = can('canManageProfiles')  ? 'flex' : 'none';
   document.getElementById('tab-previsao').style.display  = can('canViewPrevisao')    ? 'flex' : 'none';
@@ -1932,16 +1946,12 @@ function getFilteredProgs() {
   let progs = ProgAPI.list();
 
   // Terminal users only see progs assigned to their terminal
+  // Uses terminalName from Firestore user profile
   if (currentUser && !can('canSeeAll')) {
-    // Check terminalName field (set by master when approving/creating terminal user)
-    // OR derive from role key if custom profile
-    const userTerminal = (currentUser.terminalName || 
-      (currentUser.role.startsWith('terminal_') ? currentUser.role.replace('terminal_','') : null) ||
-      '').toLowerCase().trim();
+    const userTerminal = (currentUser.terminalName || '').trim().toLowerCase();
     if (userTerminal) {
-      progs = progs.filter(p => (p.terminal||'').toLowerCase().trim() === userTerminal);
+      progs = progs.filter(p => (p.terminal||'').trim().toLowerCase() === userTerminal);
     }
-    // csc/rumo sees all progs (but limited edit rights)
   }
 
   if (de)       progs = progs.filter(p => p.data >= de);
@@ -2512,7 +2522,10 @@ async function approveUser() {
   if (pass && pass.length < 6) { toast('Senha mínima de 6 caracteres.',true); return; }
   showLoading('Aprovando usuário...');
   try {
-    await AuthAPI.approveUser(approvingUserId, role, pass);
+    const apTerminal = (role === 'terminal' || role.startsWith('terminal_'))
+      ? (document.getElementById('ap-terminalname')?.value.trim() || '')
+      : '';
+    await AuthAPI.approveUser(approvingUserId, role, pass, apTerminal);
     closeModal('modal-approve');
     await renderUsers();
     toast('✓ '+(u.nome||u.email)+' aprovado como '+roleLabel(role)+'.');
@@ -2554,6 +2567,9 @@ function openEditUser(userId) {
   document.getElementById('eu-email').value = u.email || '';
   document.getElementById('eu-role').value  = u.role  || 'terminal';
   document.getElementById('eu-pass').value  = '';
+  const euTN = document.getElementById('eu-terminalname');
+  if (euTN) euTN.value = u.terminalName || '';
+  toggleTerminalName('eu');
   openModal('modal-edit-user');
 }
 
@@ -2567,8 +2583,13 @@ async function saveEditUser() {
   if (pass && pass.length<6) { toast('Senha mínima de 6 caracteres.',true); return; }
   showLoading('Salvando...');
   try {
-    const fields = { nome, email, role };
+    const terminalName = (role === 'terminal' || role.startsWith('terminal_'))
+      ? (document.getElementById('eu-terminalname')?.value.trim() || '')
+      : '';
+    const fields = { nome, email, role, terminalName };
     await AuthAPI.updateUser(id, fields);
+    // Update local currentUser if editing self
+    if (currentUser && currentUser.uid === id) currentUser.terminalName = terminalName;
     closeModal('modal-edit-user');
     await renderUsers();
     toast('Usuário atualizado com sucesso.');
@@ -2661,6 +2682,13 @@ async function renderUsers() {
 
 
 
+
+// Show/hide terminalName field based on role selection
+function toggleTerminalName(prefix) {
+  const role = document.getElementById(prefix+'-role').value;
+  const wrap = document.getElementById(prefix+'-terminalname-wrap');
+  if (wrap) wrap.style.display = (role === 'terminal') ? 'block' : 'none';
+}
 // ══════════════════════════════════════════
 // MEU PERFIL — usuário edita o próprio cadastro
 // ══════════════════════════════════════════
