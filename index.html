@@ -2258,7 +2258,7 @@ function renderTable() {
         const completedStyle = isCompleted ? 'background:#f0fdf4;' : '';
 
         html += `<tr class="row-vagao" style="${completedStyle}">
-          <td class="sub-lbl" colspan="7" style="padding-left:48px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
+          <td class="sub-lbl" colspan="6" style="padding-left:48px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
@@ -2315,6 +2315,7 @@ function renderTable() {
                 <span style="font-size:9px;color:#92400e;font-weight:700;">⚠️ PDF removido</span>
               </div>` : ''}
           </td>
+          <td></td><!-- Ações col empty in vagao row -->
           <td><!-- Fichas Seg. (per prog, empty on vagão row) --></td>
           </tr>`;
           } // end vagao for loop
