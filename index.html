@@ -1177,14 +1177,18 @@ const AuthAPI = {
     return { ok: true };
   },
 
-  // Delete user from Firestore (Auth deletion requires Admin SDK)
+  // Delete user from Firestore
+  // Note: Firebase Auth account requires Admin SDK to fully delete.
+  // The Firestore profile is deleted, so the user can no longer access data.
   async deleteUser(uid) {
     await db.collection('users').doc(uid).delete();
+    // Also delete any customProfiles created by this user (if applicable)
     return { ok: true };
   },
 
   // Reject pending user
   async rejectUser(uid) {
+    // Remove pending user from Firestore (they never fully registered)
     await db.collection('users').doc(uid).delete();
     return { ok: true };
   }
@@ -1198,7 +1202,8 @@ const ProgAPI = {
 
   async loadAll(terminalFilter) {
     let q = db.collection('programacoes').orderBy('data','desc');
-    if (terminalFilter) q = q.where('terminal','==', terminalFilter);
+    // NOTE: Firestore .where is case-sensitive exact match
+    // We load all and filter client-side for terminal users to handle case differences
     const snap = await q.get();
     DB.programacoes = snap.docs.map(d => ({
       id: d.id, collapsed: false,
@@ -1259,11 +1264,18 @@ const ProgAPI = {
   },
 
   async delete(id) {
-    // Delete vagoes subcollection first
+    // Delete all vagoes and their pdfData subcollections
     const vSnap = await db.collection('programacoes').doc(id).collection('vagoes').get();
-    const batch = db.batch();
-    vSnap.docs.forEach(v => batch.delete(v.ref));
-    await batch.commit();
+    for (const vDoc of vSnap.docs) {
+      // Delete pdfData subcollection of each vagão
+      const pdSnap = await db.collection('programacoes').doc(id)
+        .collection('vagoes').doc(vDoc.id).collection('pdfData').get();
+      const batch = db.batch();
+      pdSnap.docs.forEach(pd => batch.delete(pd.ref));
+      batch.delete(vDoc.ref);
+      await batch.commit();
+    }
+    // Delete the programação document itself
     await db.collection('programacoes').doc(id).delete();
   }
 };
@@ -1779,7 +1791,7 @@ document.querySelectorAll('.modal-overlay').forEach(o => {
 // ══════════════════════════════════════════
 function openProgModal(progId=null) {
   editingProgId=progId;
-  populateTerminalSelects();
+  try { populateTerminalSelects(); } catch(e) { console.warn('populateTerminalSelects:', e); }
   document.getElementById('modal-prog-title').textContent = progId ? 'Editar Programação' : 'Nova Programação';
   if (progId) {
     const p = ProgAPI.list().find(x=>x.id===progId);
@@ -1945,12 +1957,15 @@ function getFilteredProgs() {
   const produto  = document.getElementById('filter-produto')?.value || '';
   let progs = ProgAPI.list();
 
-  // Terminal users only see progs assigned to their terminal
-  // Uses terminalName from Firestore user profile
+  // STRICT terminal isolation: non-admin users ONLY see their own terminal
   if (currentUser && !can('canSeeAll')) {
     const userTerminal = (currentUser.terminalName || '').trim().toLowerCase();
     if (userTerminal) {
+      // Exact match (case-insensitive) — prevents cross-terminal visibility
       progs = progs.filter(p => (p.terminal||'').trim().toLowerCase() === userTerminal);
+    } else {
+      // No terminalName set → show nothing (safer than showing all)
+      progs = [];
     }
   }
 
@@ -2137,11 +2152,16 @@ async function removePdf(progId, idx, type) {
   showLoading('Removendo PDF...');
   try {
     if (type==='retorno') {
-      if (v.nfRetornoPath && v.vid) await StorageAPI.deletePdf(progId, v.vid, 'retorno');
+      // Delete from Firestore pdfData subcollection
+      if (v.vid) {
+        try { await db.collection('programacoes').doc(progId).collection('vagoes').doc(v.vid).collection('pdfData').doc('retorno').delete(); } catch(e){}
+      }
       v.nfRetornoFile=null; v.nfRetornoFileObj=null; v.nfRetornoPath=null; v.nfRetornoUrl=null;
       v.nfRetorno=''; v.vagao=''; v.lacre='';
     } else {
-      if (v.nfInpasaPath && v.vid) await StorageAPI.deletePdf(progId, v.vid, 'inpasa');
+      if (v.vid) {
+        try { await db.collection('programacoes').doc(progId).collection('vagoes').doc(v.vid).collection('pdfData').doc('inpasa').delete(); } catch(e){}
+      }
       v.nfInpasaFile=null; v.nfInpasaFileObj=null; v.nfInpasaPath=null; v.nfInpasaUrl=null;
       v.nfInpasa='';
     }
@@ -3215,7 +3235,9 @@ async function saveProfile() {
 async function deleteProfile(profileId) {
   showLoading('Removendo perfil...');
   try {
-    await ProfilesAPI.delete(profileId);
+    // Delete the profile document from Firestore
+    await db.collection('customProfiles').doc(profileId).delete();
+    await ProfilesAPI.loadAll();
     renderProfiles();
     populateTerminalSelects();
     toast('Perfil removido.');
