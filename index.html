@@ -26,6 +26,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 
 <!-- Other libs -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -3038,157 +3039,101 @@ function renderPrevisao() {
 }
 
 // ══════════════════════════════════════════
-// ENVIAR PARA FATURAMENTO (MAILTO)
+// ENVIAR PARA FATURAMENTO (Cloud Function + SendGrid)
 // ══════════════════════════════════════════
 async function enviarFaturamento(progId, vagaoIdx) {
   const prog = ProgAPI.list().find(p => p.id === progId);
   if (!prog) return;
   const v = prog.vagoes[vagaoIdx];
-  if (!v) return;
+  if (!v || !v.nfRetornoFile) { toast('Anexe o PDF da NF de Retorno antes de enviar.', true); return; }
 
-  const dataAtual = fmtDateTime();
-  const vagaoNum  = v.vagao || '?';
-  const terminal  = prog.terminal || '?';
-  const dataFmt   = fmtDate(prog.data);
-
-  const subject = encodeURIComponent(
-    `FATURAMENTO FERROVIÁRIO - VAGÃO ${vagaoNum} - TERMINAL ${terminal} - DATA ${dataFmt}`);
-
-  const body = encodeURIComponent(
-`SOLICITAÇÃO DE FATURAMENTO FERROVIÁRIO
-
-Pedido:       ${prog.pedido}
-Produto:      ${prog.produto}
-Usina/Filial: ${prog.usina}
-Cliente:      ${prog.cliente}
-Local Entrega:${prog.local}
-Terminal:     ${terminal}
-Data Prog.:   ${dataFmt}
-Encoste:      ${prog.encoste || '—'}
-
-DADOS DO VAGÃO:
-Vagão Nº:     ${vagaoNum}
-NF Retorno:   ${v.nfRetorno || '—'}
-Volume (m³):  ${v.volume || '—'}
-Lacre:        ${v.lacre || '—'}
-
-Data/Hora:    ${dataAtual}
-
-${v.nfRetornoFile ? 'ANEXO: ' + v.nfRetornoFile : 'Obs: NF de Retorno deve ser anexada manualmente ao e-mail.'}
-
----
-Enviado pelo sistema de Programações Ferroviárias Inpasa.`);
-
-  const to = 'atendimento.externo@inpasa.com.br;csc.faturamento@inpasa.com.br;csc@elosinpasa.com.br;rafael.mulato@inpasa.com.br;kemelyn.penha@inpasa.com.br';
-  const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
-
-  // If PDF is attached, trigger download first so user can manually attach to email
-  if (v.nfRetornoFileObj) {
-    // Download the PDF so user can attach it to the email
-    const pdfUrl = URL.createObjectURL(v.nfRetornoFileObj);
-    const dlLink = document.createElement('a');
-    dlLink.href = pdfUrl;
-    dlLink.download = v.nfRetornoFile || 'NF_Retorno.pdf';
-    document.body.appendChild(dlLink);
-    dlLink.click();
-    document.body.removeChild(dlLink);
-    setTimeout(() => URL.revokeObjectURL(pdfUrl), 3000);
-    toast('📎 PDF baixado automaticamente — anexe-o ao e-mail antes de enviar!', false);
-  } else if (v.nfRetornoPath && v.vid) {
-    // PDF in Firestore — fetch and download
-    try {
-      const blob = await StorageAPI.getPdfBlob(progId, v.vid, 'retorno');
-      if (blob) {
-        const pdfUrl = URL.createObjectURL(blob);
-        const dlLink = document.createElement('a');
-        dlLink.href = pdfUrl;
-        dlLink.download = v.nfRetornoFile || 'NF_Retorno.pdf';
-        document.body.appendChild(dlLink);
-        dlLink.click();
-        document.body.removeChild(dlLink);
-        setTimeout(() => URL.revokeObjectURL(pdfUrl), 3000);
-        toast('📎 PDF baixado automaticamente — anexe-o ao e-mail antes de enviar!', false);
-      }
-    } catch(e) { console.warn('PDF download error:', e); }
-  }
-
-  // Open mailto after short delay (so download starts first)
-  setTimeout(() => { window.location.href = mailto; }, 800);
-
-  // Mark as enviado
-  setTimeout(async () => {
-    v.enviadoFaturamentoAt = dataAtual;
-    if (v.vid) {
-      try {
-        await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: dataAtual });
-      } catch(e) { console.warn('enviarFaturamento save:', e); }
-    }
-    renderTable();
-  }, 1500);
-}
-
-// ══════════════════════════════════════════
-// PER-PROG EXCEL AND ZIP EXPORT
-// ══════════════════════════════════════════
-function exportExcelProg(progId) {
-  const p = ProgAPI.list().find(x => x.id === progId);
-  if (!p) { toast('Programação não encontrada.', true); return; }
-
-  const rows = [['Data Prog.','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Vagão Nº','NF Retorno','Volume (m³)','Lacre','NF Inpasa','Status','Enviado Faturamento']];
-  for (const v of p.vagoes) {
-    let status = 'Aguardando encoste';
-    if (v.enviadoFaturamentoAt) status = 'Enviado p/ Faturamento';
-    else if ((v.nfInpasa||'').trim()) status = 'Concluído';
-    else if ((v.nfRetorno||'').trim()) status = 'Ag. faturamento';
-    else if ((v.vagao||'').trim()) status = 'Em carregamento';
-    rows.push([fmtDate(p.data),p.pedido,p.encoste||'',p.produto,p.usina,p.cliente,p.local,p.terminal||'',v.vagao||'',v.nfRetorno||'',v.volume||'',v.lacre||'',v.nfInpasa||'',status,v.enviadoFaturamentoAt||'']);
-  }
-
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:12},{wch:10},{wch:10},{wch:18},{wch:22},{wch:22},{wch:22},{wch:14},{wch:12},{wch:14},{wch:10},{wch:12},{wch:14},{wch:18},{wch:20}];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Programação');
-  const ds = fmtDate(p.data).replace(/\//g,'');
-  XLSX.writeFile(wb, `Inpasa_Pedido${p.pedido}_${ds}.xlsx`);
-  toast('Excel gerado!');
-}
-
-async function exportZipProg(progId) {
-  const p = ProgAPI.list().find(x => x.id === progId);
-  if (!p) { toast('Programação não encontrada.', true); return; }
-
-  const hasFiles = p.vagoes.some(v => v.nfRetornoFileObj || v.nfInpasaFileObj || v.laudoFileObj);
-  if (!hasFiles) { toast('Nenhum PDF anexado nesta programação.', true); return; }
-
-  showLoading('Gerando ZIP...');
+  showLoading('Enviando e-mail de faturamento...');
   try {
-    const zip = new JSZip();
-    const safe = s => (s||'').replace(/[\/\\:*?"<>|]/g,'_').trim() || 'sem_nome';
-    const folderName = safe(`Pedido${p.pedido}_${fmtDate(p.data)}`);
-    const retFolder  = zip.folder(`${folderName}/NF_Retorno`);
-    const inpFolder  = zip.folder(`${folderName}/NF_Inpasa`);
-    const laudoFolder= zip.folder(`${folderName}/Laudos`);
+    const dataAtual = fmtDateTime();
 
-    for (let i = 0; i < p.vagoes.length; i++) {
-      const v = p.vagoes[i];
-      const vagaoLabel = safe(v.vagao || `Vagao_${i+1}`);
-      if (v.nfRetornoFileObj) retFolder.file(`NF_Retorno_${vagaoLabel}.pdf`, v.nfRetornoFileObj);
-      else if (v.nfRetornoFile && v.vid) {
-        try { const blob = await StorageAPI.getPdfBlob(p.id, v.vid, 'retorno'); if(blob) retFolder.file(`NF_Retorno_${vagaoLabel}.pdf`, blob); } catch(e){}
-      }
-      if (v.nfInpasaFileObj) inpFolder.file(`NF_Inpasa_${vagaoLabel}.pdf`, v.nfInpasaFileObj);
-      if (v.laudoFileObj) laudoFolder.file(`Laudo_${vagaoLabel}.pdf`, v.laudoFileObj);
+    // Get PDF as base64 for attachment
+    let pdfBase64  = null;
+    let pdfFileName = v.nfRetornoFile || 'NF_Retorno.pdf';
+
+    if (v.nfRetornoFileObj) {
+      // PDF still in memory — convert to base64
+      pdfBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = () => reject(new Error('Erro ao ler PDF'));
+        reader.readAsDataURL(v.nfRetornoFileObj);
+      });
+    } else if (v.vid) {
+      // PDF stored in Firestore pdfData subcollection
+      try {
+        const snap = await db.collection('programacoes').doc(progId)
+          .collection('vagoes').doc(v.vid)
+          .collection('pdfData').doc('retorno').get();
+        if (snap.exists) {
+          pdfBase64   = snap.data().data;
+          pdfFileName = snap.data().fileName || pdfFileName;
+        }
+      } catch(e) { console.warn('PDF fetch error:', e); }
     }
 
-    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${folderName}.zip`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-    toast('ZIP gerado!');
-  } catch(e) { toast('Erro ao gerar ZIP: ' + e.message, true); }
-  finally { hideLoading(); }
+    // Call Cloud Function
+    const sendEmail = functions.httpsCallable('enviarFaturamento');
+    const result = await sendEmail({
+      progId,
+      vagaoId:     v.vid || null,
+      prog: {
+        pedido:   prog.pedido,
+        produto:  prog.produto,
+        usina:    prog.usina,
+        cliente:  prog.cliente,
+        local:    prog.local,
+        terminal: prog.terminal || '—',
+        data:     fmtDate(prog.data),
+        encoste:  prog.encoste || '—',
+      },
+      vagao: {
+        vagao:      v.vagao     || '—',
+        nfRetorno:  v.nfRetorno || '—',
+        volume:     v.volume    || '—',
+        lacre:      v.lacre     || '—',
+        nfInpasa:   v.nfInpasa  || '—',
+      },
+      pdfBase64,
+      pdfFileName,
+      sentAt: dataAtual,
+    });
+
+    if (result.data.success) {
+      // Update local state
+      v.enviadoFaturamentoAt = result.data.sentAt || dataAtual;
+      if (v.vid) {
+        try {
+          await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: v.enviadoFaturamentoAt });
+        } catch(e) { console.warn('updateVagao:', e); }
+      }
+      renderTable();
+      toast('✅ E-mail enviado com PDF anexado!');
+    }
+  } catch(e) {
+    console.error('enviarFaturamento error:', e);
+    // Fallback to mailto if Cloud Function fails
+    const fallback = confirm(
+      'Erro ao enviar via servidor: ' + (e.message || e) +
+      '\n\nDeseja abrir o cliente de e-mail como alternativa?'
+    );
+    if (fallback) openMailtoFallback(progId, vagaoIdx);
+  } finally { hideLoading(); }
+}
+
+// Fallback mailto (used if Cloud Function fails)
+function openMailtoFallback(progId, vagaoIdx) {
+  const prog = ProgAPI.list().find(p => p.id === progId);
+  if (!prog) return;
+  const v    = prog.vagoes[vagaoIdx];
+  const subj = encodeURIComponent(`FATURAMENTO FERROVIÁRIO - VAGÃO ${v.vagao||'?'} - TERMINAL ${prog.terminal||'?'} - DATA ${fmtDate(prog.data)}`);
+  const body = encodeURIComponent(`Pedido: ${prog.pedido}\nVagão: ${v.vagao}\nNF Retorno: ${v.nfRetorno}\nVolume: ${v.volume}\nLacre: ${v.lacre}\nTerminal: ${prog.terminal}`);
+  const to   = 'atendimento.externo@inpasa.com.br;csc.faturamento@inpasa.com.br;csc@elosinpasa.com.br;rafael.mulato@inpasa.com.br;kemelyn.penha@inpasa.com.br';
+  window.location.href = `mailto:${to}?subject=${subj}&body=${body}`;
 }
 
 // ══════════════════════════════════════════

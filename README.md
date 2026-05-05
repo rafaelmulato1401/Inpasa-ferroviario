@@ -1,131 +1,85 @@
-# Inpasa – Programações Ferroviárias
+# Cloud Functions — Inpasa Ferroviário
 
-## Arquivos do projeto
+## Pré-requisitos
 
-```
-inpasa_deploy/
-├── index.html          ← App completo (único arquivo HTML)
-├── 581.jpg             ← Foto da usina (fundo da tela de login)
-├── netlify.toml        ← Config Netlify
-├── firebase.json       ← Config Firebase CLI
-├── firestore.rules     ← Regras de segurança Firestore
-├── storage.rules       ← Regras de segurança Storage
-└── README.md
-```
+1. Node.js 18+ instalado
+2. Firebase CLI: `npm install -g firebase-tools`
+3. Conta SendGrid com sender verificado
 
 ---
 
-## Deploy no Netlify
+## Setup SendGrid
 
-### Opção 1 — Arrastar e soltar (mais rápido)
-1. Acesse [app.netlify.com](https://app.netlify.com)
-2. Clique em **"Add new site" → "Deploy manually"**
-3. Arraste a pasta `inpasa_deploy` inteira para a área de upload
-4. Pronto! O site estará no ar em segundos.
-
-### Opção 2 — Via GitHub
-1. Suba os arquivos para um repositório GitHub
-2. No Netlify: **"Add new site" → "Import from Git"**
-3. Selecione o repositório → clique **Deploy**
+1. Acesse [sendgrid.com](https://sendgrid.com) e crie uma conta gratuita
+2. Vá em **Settings → API Keys → Create API Key**
+3. Selecione **Full Access** → clique em **Create & View**
+4. Copie a chave (começa com `SG.`)
+5. Em **Settings → Sender Authentication**, verifique o domínio `inpasa.com.br`
+   ou crie um Sender com e-mail `noreply@inpasa.com.br`
 
 ---
 
-## Configuração Firebase (OBRIGATÓRIO antes do primeiro acesso)
+## Deploy da Cloud Function
 
-### 1. Ativar Firebase Authentication
-No [Console Firebase](https://console.firebase.google.com/project/programacaoferroviariainpasa):
-1. Menu **Authentication → Sign-in method**
-2. Ative **"E-mail/senha"**
-
-### 2. Criar usuário Master inicial
-Em **Authentication → Users → Add user**:
-- E-mail: `rafael.mulato@inpasa.com.br`
-- Senha: `Inpasa@master`
-
-Depois em **Firestore → Coleção "users"**, crie documento com o **UID** deste usuário:
-```json
-{
-  "nome":              "Rafael Mulato",
-  "email":             "rafael.mulato@inpasa.com.br",
-  "empresa":           "Inpasa Agroindustrial",
-  "palavraSeguranca":  "Inpasa2024",
-  "role":              "master",
-  "active":            true,
-  "createdAt":         (server timestamp)
-}
-```
-
-### 3. Criar usuário Cleidy Wagner
-Em **Authentication → Users → Add user**:
-- E-mail: `cleidywagner6@gmail.com`
-- Senha: `Inpasa@2024`
-
-Documento Firestore com o UID gerado:
-```json
-{
-  "nome":    "Cleidy Wagner",
-  "email":   "cleidywagner6@gmail.com",
-  "empresa": "Inpasa",
-  "role":    "terminal",
-  "active":  true
-}
-```
-
-### 4. Publicar regras Firestore e Storage
-Via Firebase CLI:
 ```bash
-npm install -g firebase-tools
+# 1. Entre na pasta do projeto
+cd inpasa_functions
+
+# 2. Faça login no Firebase
 firebase login
+
+# 3. Selecione o projeto
 firebase use programacaoferroviariainpasa
-firebase deploy --only firestore:rules,storage
+
+# 4. Configure a chave do SendGrid
+firebase functions:config:set sendgrid.key="SG.SUA_CHAVE_AQUI"
+
+# 5. Instale dependências
+cd functions && npm install && cd ..
+
+# 6. Deploy
+firebase deploy --only functions
 ```
 
-### 5. Configurar CORS no Storage (para download ZIP)
-Crie um arquivo `cors.json`:
-```json
-[{
-  "origin": ["*"],
-  "method": ["GET"],
-  "maxAgeSeconds": 3600
-}]
+Após o deploy, a URL da função será:
 ```
-Execute:
+https://us-central1-programacaoferroviariainpasa.cloudfunctions.net/enviarFaturamento
+```
+
+---
+
+## Verificar se está funcionando
+
 ```bash
-gsutil cors set cors.json gs://programacaoferroviariainpasa.firebasestorage.app
+firebase functions:log
 ```
 
 ---
 
-## Estrutura Firestore
+## Atualizar a chave SendGrid
 
-```
-users/
-  {uid}/
-    nome, email, empresa, palavraSeguranca,
-    role, active, createdAt
-
-programacoes/
-  {progId}/
-    data, pedido, produto, usina, cliente,
-    local, terminal, qtd, createdAt, createdBy
-    vagoes/
-      {vagaoId}/
-        idx, vagao, nfRetorno, lacre, nfInpasa,
-        nfRetornoFile, nfRetornoPath, nfRetornoUrl,
-        nfInpasaFile, nfInpasaPath, nfInpasaUrl
-
-customProfiles/
-  {profileId}/
-    name, baseRole, roleKey
+```bash
+firebase functions:config:set sendgrid.key="SG.NOVA_CHAVE"
+firebase deploy --only functions
 ```
 
 ---
 
-## Perfis de acesso
+## Custo estimado
 
-| Perfil   | Programações | Usuários | Perfis | Filtros avançados |
-|----------|-------------|----------|--------|-------------------|
-| Master   | Tudo        | ✅        | ✅      | ✅                 |
-| Inpasa   | Tudo        | ❌        | ❌      | ✅                 |
-| Terminal | Restrito ao seu terminal | ❌ | ❌ | ❌           |
-| CSC      | Só NF Inpasa | ❌       | ❌      | ❌                 |
+- **Firebase Functions**: gratuito até 2 milhões de invocações/mês → custo zero para 1.600 e-mails
+- **SendGrid**: plano gratuito inclui **100 e-mails/dia (3.000/mês)** → cobre seu volume
+- Se passar de 3.000/mês → plano Essentials ($19.95/mês para 50.000 e-mails)
+
+---
+
+## Estrutura do projeto
+
+```
+inpasa_functions/
+├── firebase.json          ← Config Firebase
+├── README.md              ← Este arquivo
+└── functions/
+    ├── index.js           ← Cloud Function principal
+    └── package.json       ← Dependências Node.js
+```

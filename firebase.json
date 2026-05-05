@@ -1,6 +1,10 @@
 {
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs18"
+  },
   "hosting": {
-    "public": ".",
+    "public": "../inpasa_deploy",
     "ignore": [
       "firebase.json",
       "firestore.rules",
@@ -16,9 +20,9 @@
     ]
   },
   "firestore": {
-    "rules": "firestore.rules"
+    "rules": "../inpasa_deploy/firestore.rules"
   },
   "storage": {
-    "rules": "storage.rules"
+    "rules": "../inpasa_deploy/storage.rules"
   }
 }
