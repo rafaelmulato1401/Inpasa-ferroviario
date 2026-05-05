@@ -358,6 +358,54 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 .doc-btn.has-file { border-color:#7c3aed; color:#7c3aed; background:#ede9f8; }
 .doc-btn:disabled { opacity:.4; cursor:not-allowed; }
 
+
+/* Group rows: Date and Terminal */
+.row-group-date {
+  background: var(--blue) !important;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.row-group-date:hover { background: #1e4a8a !important; }
+.row-group-date td { color: #fff !important; padding: 9px 12px !important; }
+
+.row-group-terminal {
+  background: #e8eef8 !important;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+.row-group-terminal:hover { background: #d4dff5 !important; }
+.row-group-terminal td { padding: 7px 12px !important; color: var(--blue) !important; }
+
+.row-prog { background: #f8faff; }
+
+/* Group rows: Date and Terminal */
+.row-group-date {
+  background: var(--blue) !important;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.row-group-date:hover { background: #1e4a8a !important; }
+.row-group-date td { color: #fff !important; padding: 9px 12px !important; }
+
+.row-group-terminal {
+  background: #e8eef8 !important;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+.row-group-terminal:hover { background: #d4dff5 !important; }
+.row-group-terminal td { padding: 7px 12px !important; color: var(--blue) !important; }
+
+.row-prog { background: #f8faff; }
 /* Toast */
 .toast { position:fixed; bottom:20px; right:20px; z-index:9999; background:var(--blue); color:var(--white); padding:10px 16px; border-radius:8px; font-size:12px; box-shadow:0 4px 20px rgba(0,0,0,.2); transform:translateY(20px); opacity:0; transition:all .25s; pointer-events:none; max-width:280px; }
 .toast.show { transform:translateY(0); opacity:1; }
@@ -629,23 +677,23 @@ tbody tr { border-bottom:1px solid #edf0f8; }
           <table>
             <thead>
               <tr>
-                <th>Data</th>
                 <th>Nº Pedido</th>
                 <th style="width:90px">Encoste</th>
                 <th class="hide-mobile">Produto</th>
                 <th class="hide-mobile">Usina/Filial</th>
                 <th class="hide-mobile">Cliente</th>
                 <th class="hide-mobile">Local entrega</th>
-                <th class="hide-mobile" style="width:90px">Terminal</th>
                 <th style="text-align:center;width:50px">Vag.</th>
                 <th style="width:100px">Vagão Nº</th>
-                <th style="width:90px">NF Retorno</th><th style="width:80px">Volume (m³)</th>
+                <th style="width:90px">NF Retorno</th>
+                <th style="width:80px">Volume (m³)</th>
                 <th class="hide-mobile" style="width:80px">Lacre</th>
                 <th style="width:90px">NF Inpasa</th>
                 <th style="width:80px">Laudo</th>
                 <th style="width:120px">Status</th>
                 <th style="width:90px">Faturamento</th>
                 <th style="width:62px">Ações</th>
+                <th style="width:110px">Fichas Seg.</th>
               </tr>
             </thead>
             <tbody id="table-body">
@@ -2054,13 +2102,24 @@ function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Collapse state for group rows
+const _groupState = {};
+function getGroupState(key) {
+  if (_groupState[key] === undefined) _groupState[key] = false; // expanded by default
+  return _groupState[key];
+}
+function toggleGroupState(key) {
+  _groupState[key] = !_groupState[key];
+  renderTable();
+}
+
 function renderTable() {
   const tbody = document.getElementById('table-body');
   const progs = getFilteredProgs();
   const all   = ProgAPI.list();
 
   // Update filter count
-  const fc = document.getElementById('filter-count');
+  const fc  = document.getElementById('filter-count');
   const de  = document.getElementById('filter-de').value;
   const ate = document.getElementById('filter-ate').value;
   fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
@@ -2070,41 +2129,92 @@ function renderTable() {
     return;
   }
 
-  let html='';
+  // Group: date → terminal → [progs]
+  const byDate = {};
   for (const p of progs) {
-    const arrow    = p.collapsed ? '▶' : '▼';
-    const canEdit  = can('canEditProg');
-    const canDel   = can('canDeleteProg');
-    const locked   = isDateLocked(p.data);
-    const lockNote = locked ? '<span class="locked-badge">Bloqueado</span>' : '';
+    const d = p.data || '9999-12-31';
+    const t = p.terminal || '(Sem terminal)';
+    if (!byDate[d]) byDate[d] = {};
+    if (!byDate[d][t]) byDate[d][t] = [];
+    byDate[d][t].push(p);
+  }
+  const sortedDates = Object.keys(byDate).sort();
 
-    html += `<tr class="row-prog">
-      <td><span class="expand-btn" onclick="toggleCollapse('${p.id}')">${arrow}</span>${fmtDate(p.data)}${lockNote}</td>
-      <td>${esc(p.pedido)}</td>
-      <td>${p.encoste ? `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#e0f2fe;color:#0369a1;">${esc(p.encoste)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}</td>
-      <td class="hide-mobile">${esc(p.produto)}</td>
-      <td class="hide-mobile">${esc(p.usina)}</td>
-      <td class="hide-mobile">${esc(p.cliente)}</td>
-      <td class="hide-mobile">${esc(p.local)}</td>
-      <td class="hide-mobile">${p.terminal ? `<span class="terminal-badge">${esc(p.terminal)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}<br>${getFichaButtons(p)}</td>
-      <td style="text-align:center;">${p.qtd}</td>
-      <td colspan="8" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
-      <td></td>
-      <td></td>
-      <td>
-        <div class="action-icons">
-          <button class="icon-btn" title="Editar" onclick="openProgModal('${p.id}')" ${(!canEdit||locked)?'disabled':''}>✏️</button>
-          <button class="icon-btn del" title="Excluir" onclick="openDeleteModal('${p.id}')" ${(!canDel||locked)?'disabled':''}>🗑️</button>
-          ${can('canDownload') ? `
-          <button class="icon-btn" title="Exportar Excel desta programação" onclick="exportExcelProg('${p.id}')">📊</button>
-          <button class="icon-btn" title="Baixar PDFs desta programação" onclick="exportZipProg('${p.id}')">📦</button>` : ''}
-        </div>
+  const canEdit = can('canEditProg');
+  const canDel  = can('canDeleteProg');
+  let html = '';
+
+  for (const date of sortedDates) {
+    const dateKey       = `date_${date}`;
+    const dateCollapsed = getGroupState(dateKey);
+    const dateArrow     = dateCollapsed ? '▶' : '▼';
+    const terminals     = byDate[date];
+    const totalProgs    = Object.values(terminals).flat().length;
+    const totalVagoes   = Object.values(terminals).flat().reduce((s,p) => s+p.qtd, 0);
+
+    // DATE GROUP ROW
+    html += `<tr class="row-group-date" onclick="toggleGroupState('${dateKey}')">
+      <td colspan="17">
+        <span style="margin-right:8px;font-size:13px;">${dateArrow}</span>
+        📅 ${fmtDate(date)}
+        <span style="margin-left:16px;font-size:11px;font-weight:400;opacity:.8;">
+          ${Object.keys(terminals).length} terminal(is) · ${totalProgs} programação(ões) · ${totalVagoes} vagões
+        </span>
       </td>
-      <td><!-- Laudo col (per vagão, empty on prog row) --></td>
     </tr>`;
 
-    if (!p.collapsed) {
-      for (let i=0; i<p.vagoes.length; i++) {
+    if (dateCollapsed) continue;
+
+    for (const termName of Object.keys(terminals).sort()) {
+      const termKey       = `term_${date}_${termName}`;
+      const termCollapsed = getGroupState(termKey);
+      const termArrow     = termCollapsed ? '▶' : '▼';
+      const termProgs     = terminals[termName];
+      const termVagoes    = termProgs.reduce((s,p) => s+p.qtd, 0);
+
+      // TERMINAL GROUP ROW
+      html += `<tr class="row-group-terminal" onclick="toggleGroupState('${termKey}')">
+        <td colspan="17">
+          <span style="margin-left:16px;margin-right:8px;">${termArrow}</span>
+          🚉 <span class="terminal-badge" style="margin:0 8px;">${esc(termName)}</span>
+          <span style="font-size:11px;font-weight:400;color:#4a5580;">
+            ${termProgs.length} pedido(s) · ${termVagoes} vagões
+          </span>
+        </td>
+      </tr>`;
+
+      if (termCollapsed) continue;
+
+      for (const p of termProgs) {
+        const arrow    = p.collapsed ? '▶' : '▼';
+        const locked   = isDateLocked(p.data);
+        const lockNote = locked ? '<span class="locked-badge">Bloqueado</span>' : '';
+
+        // PROG ROW (without date and terminal cols — they are group headers now)
+        html += `<tr class="row-prog">
+          <td style="padding-left:32px;"><span class="expand-btn" onclick="toggleCollapse('${p.id}')">${arrow}</span>${esc(p.pedido)}${lockNote}</td>
+          <td>${p.encoste ? `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#e0f2fe;color:#0369a1;">${esc(p.encoste)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}</td>
+          <td class="hide-mobile">${esc(p.produto)}</td>
+          <td class="hide-mobile">${esc(p.usina)}</td>
+          <td class="hide-mobile">${esc(p.cliente)}</td>
+          <td class="hide-mobile">${esc(p.local)}</td>
+          <td style="text-align:center;">${p.qtd}</td>
+          <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
+          <td></td>
+          <td>
+            <div class="action-icons">
+              <button class="icon-btn" title="Editar" onclick="openProgModal('${p.id}')" ${(!canEdit||locked)?'disabled':''}>✏️</button>
+              <button class="icon-btn del" title="Excluir" onclick="openDeleteModal('${p.id}')" ${(!canDel||locked)?'disabled':''}>🗑️</button>
+              ${can('canDownload') ? `
+              <button class="icon-btn" title="Exportar Excel" onclick="exportExcelProg('${p.id}')">📊</button>
+              <button class="icon-btn" title="Baixar PDFs" onclick="exportZipProg('${p.id}')">📦</button>` : ''}
+            </div>
+          </td>
+          <td>${getFichaButtons(p)}</td>
+        </tr>`;
+
+        if (!p.collapsed) {
+          for (let i=0; i<p.vagoes.length; i++) {
         const v=p.vagoes[i];
         // Per-row lock: CSC/Terminal can't edit locked dates
         const rowLocked = locked;
@@ -2140,7 +2250,7 @@ function renderTable() {
         const completedStyle = isCompleted ? 'background:#f0fdf4;' : '';
 
         html += `<tr class="row-vagao" style="${completedStyle}">
-          <td class="sub-lbl" colspan="10" style="padding-left:20px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
+          <td class="sub-lbl" colspan="10" style="padding-left:48px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
@@ -2204,13 +2314,15 @@ function renderTable() {
               </div>`
             : '<span style="font-size:9px;color:var(--text-muted);">Aguardando PDF</span>'}
           </td>
-        </tr>`;
-      }
-    }
+          </tr>`;
+          } // end vagao for loop
+        } // end if !p.collapsed
+        } // end for progs
+      } // end for terminals
+    } // end for dates
+    tbody.innerHTML = html;
+    if (can('canSeeAll')) populateTerminalSelects();
   }
-  tbody.innerHTML = html;
-  if (can('canSeeAll')) populateTerminalSelects();
-}
 
 function toggleCollapse(progId) {
   const p = ProgAPI.list().find(x=>x.id===progId);
@@ -3152,10 +3264,13 @@ async function reenviarFaturamento(progId, vagaoIdx) {
 // EXPAND / COLLAPSE ALL
 // ══════════════════════════════════════════
 function expandAll() {
+  // Expand all group states and all prog rows
+  Object.keys(_groupState).forEach(k => _groupState[k] = false);
   ProgAPI.list().forEach(p => p.collapsed = false);
   renderTable();
 }
 function collapseAll() {
+  // Collapse only prog rows (keep date/terminal groups open)
   ProgAPI.list().forEach(p => p.collapsed = true);
   renderTable();
 }
