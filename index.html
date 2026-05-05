@@ -677,7 +677,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
           <table>
             <thead>
               <tr>
-                <th>Nº Pedido</th>
+                <th>Nº Pedido / Vagão</th>
                 <th style="width:90px">Encoste</th>
                 <th class="hide-mobile">Produto</th>
                 <th class="hide-mobile">Usina/Filial</th>
@@ -691,7 +691,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th style="width:90px">NF Inpasa</th>
                 <th style="width:80px">Laudo</th>
                 <th style="width:120px">Status</th>
-                <th style="width:90px">Faturamento</th>
+                <th style="width:130px">Faturamento</th>
                 <th style="width:62px">Ações</th>
                 <th style="width:110px">Fichas Seg.</th>
               </tr>
@@ -2258,7 +2258,7 @@ function renderTable() {
         const completedStyle = isCompleted ? 'background:#f0fdf4;' : '';
 
         html += `<tr class="row-vagao" style="${completedStyle}">
-          <td class="sub-lbl" colspan="9" style="padding-left:48px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
+          <td class="sub-lbl" colspan="8" style="padding-left:48px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
@@ -2322,6 +2322,7 @@ function renderTable() {
               </div>`
             : '<span style="font-size:9px;color:var(--text-muted);">Aguardando PDF</span>'}
           </td>
+          <td><!-- Fichas Seg. (per prog, empty on vagão row) --></td>
           </tr>`;
           } // end vagao for loop
         } // end if !p.collapsed
