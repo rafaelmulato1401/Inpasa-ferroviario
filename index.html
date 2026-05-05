@@ -690,13 +690,12 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th style="width:90px">NF Inpasa</th>
                 <th style="width:80px">Laudo</th>
                 <th style="width:120px">Status</th>
-                <th style="width:130px">Faturamento</th>
                 <th style="width:62px">Ações</th>
                 <th style="width:110px">Fichas Seg.</th>
               </tr>
             </thead>
             <tbody id="table-body">
-              <tr class="empty-row"><td colspan="17">Nenhuma programação cadastrada.</td></tr>
+              <tr class="empty-row"><td colspan="15">Nenhuma programação cadastrada.</td></tr>
             </tbody>
           </table>
         </div>
@@ -2135,7 +2134,7 @@ function renderTable() {
   fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
 
   if (!progs.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="17">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="15">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
     return;
   }
 
@@ -2208,7 +2207,7 @@ function renderTable() {
           <td class="hide-mobile">${esc(p.usina)}</td>
           <td class="hide-mobile">${esc(p.cliente)}</td>
           <td class="hide-mobile">${esc(p.local)}</td>
-          <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;"><span style="background:#e8eef8;color:#1a3a6b;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-right:8px;">${p.qtd} vag.</span>${p.collapsed?'Clique na seta para expandir':''}</td>
+          <td colspan="6" style="font-weight:400;color:var(--text-muted);font-size:10px;"><span style="background:#e8eef8;color:#1a3a6b;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-right:8px;">${p.qtd} vag.</span>${p.collapsed?'Clique na seta para expandir':''}</td>
           <td></td>
           <td>
             <div class="action-icons">
@@ -2295,33 +2294,26 @@ function renderTable() {
               }
             </div>` : ''}
           </td>
-          <td id="st-${p.id}-${i}">
+          <td id="st-${p.id}-${i}" style="min-width:120px;">
             ${getStatusBadge(v)}
-            ${v.enviadoFaturamentoAt ? `<div style="font-size:9px;color:#7c3aed;font-weight:600;margin-top:3px;">✈ Enviado ${v.enviadoFaturamentoAt}</div>` : ''}
-          </td>
-          <td>
             ${v.nfRetornoFile && !v.enviadoFaturamentoAt ? `
-              <button class="pdf-btn" style="background:#7c3aed;color:#fff;border-color:#7c3aed;font-size:10px;white-space:nowrap;"
-                onclick="enviarFaturamento('${p.id}',${i})"
-                title="PDF da NF Retorno anexado — clique para enviar ao faturamento">
-                ✈ Faturamento
-              </button>`
-            : v.enviadoFaturamentoAt && v.nfRetornoFile ? `
-              <div style="display:flex;flex-direction:column;gap:2px;">
-                <span style="font-size:9px;color:#7c3aed;font-weight:700;">✅ Enviado</span>
-                <span style="font-size:9px;color:var(--text-muted);">${v.enviadoFaturamentoAt}</span>
-                <button class="pdf-btn" style="font-size:9px;color:#7c3aed;border-color:#7c3aed;padding:1px 6px;margin-top:2px;"
-                  onclick="reenviarFaturamento('${p.id}',${i})"
-                  title="Clique para reenviar para faturamento">
-                  🔄 Reenviar
+              <div style="margin-top:4px;">
+                <button class="pdf-btn" style="background:#7c3aed;color:#fff;border-color:#7c3aed;font-size:10px;white-space:nowrap;width:100%;"
+                  onclick="enviarFaturamento('${p.id}',${i})"
+                  title="Enviar para faturamento">
+                  ✈ Env. Faturamento
                 </button>
               </div>`
-            : v.enviadoFaturamentoAt && !v.nfRetornoFile ? `
-              <div style="display:flex;flex-direction:column;gap:2px;">
-                <span style="font-size:9px;color:#92400e;font-weight:700;">⚠️ PDF removido</span>
-                <span style="font-size:9px;color:var(--text-muted);">Reanexa o PDF para reenviar</span>
+            : v.enviadoFaturamentoAt && v.nfRetornoFile ? `
+              <div style="margin-top:4px;display:flex;flex-direction:column;gap:2px;">
+                <span style="font-size:9px;color:#7c3aed;font-weight:700;">✅ Enviado ${v.enviadoFaturamentoAt}</span>
+                <button class="pdf-btn" style="font-size:9px;color:#7c3aed;border-color:#7c3aed;padding:1px 6px;"
+                  onclick="reenviarFaturamento('${p.id}',${i})">🔄 Reenviar</button>
               </div>`
-            : '<span style="font-size:9px;color:var(--text-muted);">Aguardando PDF</span>'}
+            : v.enviadoFaturamentoAt && !v.nfRetornoFile ? `
+              <div style="margin-top:4px;">
+                <span style="font-size:9px;color:#92400e;font-weight:700;">⚠️ PDF removido</span>
+              </div>` : ''}
           </td>
           <td><!-- Fichas Seg. (per prog, empty on vagão row) --></td>
           </tr>`;
