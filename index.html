@@ -505,6 +505,10 @@ tbody tr { border-bottom:1px solid #edf0f8; }
             <div class="af"><label>Nome completo</label><input type="text" id="r-nome" placeholder="Ex: João da Silva"></div>
             <div class="af"><label>Empresa</label><input type="text" id="r-empresa" placeholder="Ex: Terminal XYZ"></div>
             <div class="af"><label>Palavra de segurança</label><input type="text" id="r-palavra" placeholder="Combinada com o administrador"></div>
+            <div class="af" id="r-terminal-wrap">
+              <label>Nome do Terminal <span style="font-size:10px;color:rgba(255,255,255,.4);">(preencha se for usuário Terminal)</span></label>
+              <input type="text" id="r-terminal" placeholder="Ex: Teciap, Ultracargo">
+            </div>
             <div class="af"><label>E-mail</label><input type="email" id="r-email" placeholder="seu@empresa.com.br"></div>
             <div class="af">
               <label>Senha desejada</label>
@@ -844,6 +848,56 @@ tbody tr { border-bottom:1px solid #edf0f8; }
   </div>
 </div>
 
+
+<!-- ════ MODAL: Nova/Editar Previsão ════ -->
+<div class="modal-overlay" id="modal-previsao">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-head">
+      <div class="modal-head-left"><h3 id="modal-previsao-title">Nova Previsão</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-previsao')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="pv-id">
+      <div class="form-grid">
+        <div class="form-field"><label>Data</label><input type="date" id="pv-data"></div>
+        <div class="form-field">
+          <label>Encoste</label>
+          <select id="pv-encoste">
+            <option value="">Selecione...</option>
+            <option value="1º Encoste">1º Encoste</option>
+            <option value="2º Encoste">2º Encoste</option>
+            <option value="3º Encoste">3º Encoste</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Hora do Encoste</label><input type="time" id="pv-hora"></div>
+        <div class="form-field"><label>Quantidade de Vagões</label><input type="number" id="pv-qtd" min="1" max="500" placeholder="Ex: 30"></div>
+        <div class="form-field full">
+          <label>Terminal</label>
+          <select id="pv-terminal">
+            <option value="">Selecione o terminal...</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-previsao')">Cancelar</button>
+      <button class="btn-ok" onclick="savePrevisao()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: Confirm Delete Previsão ════ -->
+<div class="modal-overlay" id="modal-del-previsao">
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-head"><div class="modal-head-left"><h3>Excluir previsão</h3></div><button class="modal-close" onclick="closeModal('modal-del-previsao')">✕</button></div>
+    <div class="modal-body"><p style="color:var(--text);line-height:1.6;font-size:13px;">Deseja excluir esta previsão de vagões?</p></div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-del-previsao')">Cancelar</button>
+      <button class="btn-ok" style="background:var(--red);" onclick="confirmDeletePrevisao()">Excluir</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-approve">
   <div class="modal" style="max-width:440px;">
     <div class="modal-head">
@@ -1100,6 +1154,7 @@ const AuthAPI = {
       empresa:          data.empresa,
       palavraSeguranca: data.palavraSeguranca,
       email:            data.email,
+      terminalName:     data.terminalName || '',
       role:             'terminal',
       active:           false,
       createdAt:        firebase.firestore.FieldValue.serverTimestamp(),
@@ -3006,20 +3061,48 @@ Enviado pelo sistema de Programações Ferroviárias Inpasa.`);
   const to = 'atendimento.externo@inpasa.com.br;csc.faturamento@inpasa.com.br;csc@elosinpasa.com.br;rafael.mulato@inpasa.com.br;kemelyn.penha@inpasa.com.br';
   const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
 
-  // Open mailto
-  window.location.href = mailto;
+  // If PDF is attached, trigger download first so user can manually attach to email
+  if (v.nfRetornoFileObj) {
+    // Download the PDF so user can attach it to the email
+    const pdfUrl = URL.createObjectURL(v.nfRetornoFileObj);
+    const dlLink = document.createElement('a');
+    dlLink.href = pdfUrl;
+    dlLink.download = v.nfRetornoFile || 'NF_Retorno.pdf';
+    document.body.appendChild(dlLink);
+    dlLink.click();
+    document.body.removeChild(dlLink);
+    setTimeout(() => URL.revokeObjectURL(pdfUrl), 3000);
+    toast('📎 PDF baixado automaticamente — anexe-o ao e-mail antes de enviar!', false);
+  } else if (v.nfRetornoPath && v.vid) {
+    // PDF in Firestore — fetch and download
+    try {
+      const blob = await StorageAPI.getPdfBlob(progId, v.vid, 'retorno');
+      if (blob) {
+        const pdfUrl = URL.createObjectURL(blob);
+        const dlLink = document.createElement('a');
+        dlLink.href = pdfUrl;
+        dlLink.download = v.nfRetornoFile || 'NF_Retorno.pdf';
+        document.body.appendChild(dlLink);
+        dlLink.click();
+        document.body.removeChild(dlLink);
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 3000);
+        toast('📎 PDF baixado automaticamente — anexe-o ao e-mail antes de enviar!', false);
+      }
+    } catch(e) { console.warn('PDF download error:', e); }
+  }
 
-  // Mark as enviado after short delay (so mailto opens first)
+  // Open mailto after short delay (so download starts first)
+  setTimeout(() => { window.location.href = mailto; }, 800);
+
+  // Mark as enviado
   setTimeout(async () => {
     v.enviadoFaturamentoAt = dataAtual;
-    // Update status to "Enviado p/ Faturamento"
     if (v.vid) {
       try {
         await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: dataAtual });
       } catch(e) { console.warn('enviarFaturamento save:', e); }
     }
     renderTable();
-    toast('✈ E-mail de faturamento aberto! Vagão marcado como enviado.');
   }, 1500);
 }
 
