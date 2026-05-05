@@ -570,6 +570,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
       <div class="tab active" data-tab="prog" onclick="switchTab('prog')">Programações</div>
       <div class="tab" data-tab="users" id="tab-users" style="display:none;" onclick="switchTab('users')">Usuários</div>
       <div class="tab" data-tab="profiles" id="tab-profiles" style="display:none;" onclick="switchTab('profiles')">Perfis</div>
+      <div class="tab" data-tab="previsao" id="tab-previsao" style="display:none;" onclick="switchTab('previsao')">Previsão de Vagões</div>
     </div>
 
     <!-- TAB: Programações -->
@@ -640,11 +641,12 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th style="width:90px">NF Inpasa</th>
                 <th style="width:80px">Laudo</th>
                 <th style="width:120px">Status</th>
+                <th style="width:90px">Faturamento</th>
                 <th style="width:62px">Ações</th>
               </tr>
             </thead>
             <tbody id="table-body">
-              <tr class="empty-row"><td colspan="16">Nenhuma programação cadastrada.</td></tr>
+              <tr class="empty-row"><td colspan="17">Nenhuma programação cadastrada.</td></tr>
             </tbody>
           </table>
         </div>
@@ -670,6 +672,37 @@ tbody tr { border-bottom:1px solid #edf0f8; }
       <!-- Active users section -->
       <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:.75rem;" id="active-users-label">Usuários ativos</div>
       <div id="user-list-wrap"></div>
+    </div>
+
+
+    <!-- TAB: Previsão de Vagões -->
+    <div id="tab-previsao-content" style="display:none;">
+      <div class="ch">
+        <div class="ch-left"><div class="ch-title">Previsão de Vagões</div><div class="gold-bar"></div></div>
+        <div id="btn-nova-previsao-wrap">
+          <button class="btn-primary" onclick="openPrevisaoModal()" id="btn-nova-previsao" style="display:none;"><span>+</span> Nova previsão</button>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-wrap">
+          <table id="previsao-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Encoste</th>
+                <th>Hora do Encoste</th>
+                <th>Qtd Vagões</th>
+                <th>Terminal</th>
+                <th>Lançado em</th>
+                <th style="width:80px">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="previsao-body">
+              <tr class="empty-row"><td colspan="7">Nenhuma previsão cadastrada.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- TAB: Perfis -->
@@ -1179,6 +1212,7 @@ const ProgAPI = {
         nfRetornoUrl:null,  nfInpasaUrl:null,
         nfRetornoAt:null, nfInpasaAt:null,
         laudoFile:null, laudoAt:null, laudoFileObj:null,
+        enviadoFaturamentoAt:null,
         ...v
       }));
       // Init ficha fields on prog
@@ -1371,6 +1405,7 @@ const PERMS = {
     canUploadRetorno:true,  canUploadInpasa:true,
     canManageUsers:true, canManageProfiles:true,
     canDownload:true,    canSeeAll:true,      canSeeFilters:true,
+    canEditPrevisao:true, canViewPrevisao:true,
     noDateLock:true,
   },
   inpasa:   {
@@ -1379,6 +1414,7 @@ const PERMS = {
     canUploadRetorno:true,  canUploadInpasa:true,
     canManageUsers:false, canManageProfiles:false,
     canDownload:true,    canSeeAll:true,      canSeeFilters:true,
+    canEditPrevisao:false, canViewPrevisao:true,
     noDateLock:true,
   },
   terminal: {
@@ -1387,6 +1423,7 @@ const PERMS = {
     canUploadRetorno:true,  canUploadInpasa:false,
     canManageUsers:false, canManageProfiles:false,
     canDownload:true,    canSeeAll:false,     canSeeFilters:false,
+    canEditPrevisao:false, canViewPrevisao:true,
     noDateLock:false,
   },
   csc:      {
@@ -1396,6 +1433,15 @@ const PERMS = {
     canManageUsers:false, canManageProfiles:false,
     canDownload:true,    canSeeAll:false,     canSeeFilters:false,
     noDateLock:false,
+  },
+  rumo: {
+    canCreateProg:false, canEditProg:false, canDeleteProg:false,
+    canEditVagao:false,  canEditRetorno:false, canEditLacre:false,
+    canUploadRetorno:false, canUploadInpasa:false,
+    canManageUsers:false, canManageProfiles:false,
+    canDownload:true,    canSeeAll:true,      canSeeFilters:true,
+    canEditPrevisao:true, canViewPrevisao:true,
+    noDateLock:true,
   },
 };
 
@@ -1572,6 +1618,7 @@ async function initApp() {
     const tf = (!can('canSeeAll') && typeof userRole === 'string' && userRole.includes('terminal_'))
       ? getRoleDisplayName(userRole) : null;
     await ProgAPI.loadAll(tf);
+    if (can('canViewPrevisao')) await PrevisaoAPI.loadAll();
   } catch(e) { console.error('initApp load error:', e); }
   finally { hideLoading(); }
 
@@ -1587,6 +1634,8 @@ async function initApp() {
   document.getElementById('btn-zip').style.display      = can('canDownload')        ? 'flex' : 'none';
   document.getElementById('tab-users').style.display    = can('canManageUsers')     ? 'flex' : 'none';
   document.getElementById('tab-profiles').style.display = can('canManageProfiles')  ? 'flex' : 'none';
+  document.getElementById('tab-previsao').style.display  = can('canViewPrevisao')    ? 'flex' : 'none';
+  if (can('canEditPrevisao')) { const nb = document.getElementById('btn-nova-previsao'); if(nb) nb.style.display='flex'; }
 
   const advFilters = document.getElementById('adv-filters');
   if (advFilters) advFilters.style.display = can('canSeeFilters') ? 'flex' : 'none';
@@ -1601,6 +1650,8 @@ function getRoleDisplayName(role) {
   if (role === 'inpasa')   return 'Inpasa';
   if (role === 'terminal') return 'Terminal';
   if (role === 'csc')      return 'CSC';
+  if (role === 'rumo')     return 'Rumo';
+  if (role === 'rumo')     return 'Rumo';
   // Custom profile
   const custom = (DB.customProfiles||[]).find(p => p.roleKey === role);
   if (custom) return custom.name;
@@ -1685,8 +1736,10 @@ function switchTab(tab) {
   document.getElementById('tab-prog').style.display              = tab==='prog'     ? 'block' : 'none';
   document.getElementById('tab-users-content').style.display     = tab==='users'    ? 'block' : 'none';
   document.getElementById('tab-profiles-content').style.display  = tab==='profiles' ? 'block' : 'none';
+  document.getElementById('tab-previsao-content').style.display  = tab==='previsao' ? 'block' : 'none';
   if (tab==='users')    renderUsers().catch(console.error);
   if (tab==='profiles') { renderProfiles(); populateTerminalSelects(); }
+  if (tab==='previsao') { PrevisaoAPI.loadAll().then(renderPrevisao); }
 }
 
 function updatePendingBadge() {
@@ -1784,9 +1837,10 @@ async function confirmDelete() {
 // STATUS — 4 levels
 // ══════════════════════════════════════════
 function getStatusBadge(v) {
-  if ((v.nfInpasa  ||'').trim()) return '<span class="badge b-concluido">Concluído</span>';
-  if ((v.nfRetorno ||'').trim()) return '<span class="badge b-faturamento">Ag. faturamento</span>';
-  if ((v.vagao     ||'').trim()) return '<span class="badge b-carregando">Em carregamento</span>';
+  if (v.enviadoFaturamentoAt)     return '<span class="badge" style="background:#ede9f8;color:#5b21b6;">✈ Env. Faturamento</span>';
+  if ((v.nfInpasa  ||'').trim())  return '<span class="badge b-concluido">Concluído</span>';
+  if ((v.nfRetorno ||'').trim())  return '<span class="badge b-faturamento">Ag. faturamento</span>';
+  if ((v.vagao     ||'').trim())  return '<span class="badge b-carregando">Em carregamento</span>';
   return '<span class="badge b-aguardando">Aguardando encoste</span>';
 }
 
@@ -1806,6 +1860,7 @@ async function saveVagaoField(progId, idx) {
       nfInpasaFile:v.nfInpasaFile||null,  nfInpasaPath:v.nfInpasaPath||null,  nfInpasaUrl:v.nfInpasaUrl||null,
       nfRetornoAt:v.nfRetornoAt||null, nfInpasaAt:v.nfInpasaAt||null,
       laudoFile:v.laudoFile||null, laudoAt:v.laudoAt||null,
+      enviadoFaturamentoAt:v.enviadoFaturamentoAt||null,
     });
   } catch(e) { console.error('saveVagaoField:', e); }
 }
@@ -1878,13 +1933,15 @@ function getFilteredProgs() {
 
   // Terminal users only see progs assigned to their terminal
   if (currentUser && !can('canSeeAll')) {
-    const userTerminal = currentUser.role.startsWith('terminal_')
-      ? currentUser.role.replace('terminal_','').toLowerCase()
-      : null;
+    // Check terminalName field (set by master when approving/creating terminal user)
+    // OR derive from role key if custom profile
+    const userTerminal = (currentUser.terminalName || 
+      (currentUser.role.startsWith('terminal_') ? currentUser.role.replace('terminal_','') : null) ||
+      '').toLowerCase().trim();
     if (userTerminal) {
-      progs = progs.filter(p => (p.terminal||'').toLowerCase() === userTerminal);
+      progs = progs.filter(p => (p.terminal||'').toLowerCase().trim() === userTerminal);
     }
-    // CSC/csc sees all (but can only edit NF Inpasa)
+    // csc/rumo sees all progs (but limited edit rights)
   }
 
   if (de)       progs = progs.filter(p => p.data >= de);
@@ -1928,7 +1985,7 @@ function renderTable() {
   fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
 
   if (!progs.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="16">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="17">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
     return;
   }
 
@@ -1948,15 +2005,18 @@ function renderTable() {
       <td class="hide-mobile">${esc(p.usina)}</td>
       <td class="hide-mobile">${esc(p.cliente)}</td>
       <td class="hide-mobile">${esc(p.local)}</td>
-      <td class="hide-mobile">${p.terminal ? `<span class="terminal-badge">${esc(p.terminal)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}</td>
+      <td class="hide-mobile">${p.terminal ? `<span class="terminal-badge">${esc(p.terminal)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}<br>${getFichaButtons(p)}</td>
       <td style="text-align:center;">${p.qtd}</td>
-      <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
+      <td colspan="8" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
       <td></td>
       <td></td>
       <td>
         <div class="action-icons">
           <button class="icon-btn" title="Editar" onclick="openProgModal('${p.id}')" ${(!canEdit||locked)?'disabled':''}>✏️</button>
           <button class="icon-btn del" title="Excluir" onclick="openDeleteModal('${p.id}')" ${(!canDel||locked)?'disabled':''}>🗑️</button>
+          ${can('canDownload') ? `
+          <button class="icon-btn" title="Exportar Excel desta programação" onclick="exportExcelProg('${p.id}')">📊</button>
+          <button class="icon-btn" title="Baixar PDFs desta programação" onclick="exportZipProg('${p.id}')">📦</button>` : ''}
         </div>
       </td>
       <td><!-- Laudo col (per vagão, empty on prog row) --></td>
@@ -1999,7 +2059,7 @@ function renderTable() {
         const completedStyle = isCompleted ? 'background:#f0fdf4;' : '';
 
         html += `<tr class="row-vagao" style="${completedStyle}">
-          <td class="sub-lbl" colspan="9" style="padding-left:20px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
+          <td class="sub-lbl" colspan="10" style="padding-left:20px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
@@ -2035,8 +2095,18 @@ function renderTable() {
               }
             </div>` : ''}
           </td>
-          <td id="st-${p.id}-${i}">${getStatusBadge(v)}</td>
-          <td></td>
+          <td id="st-${p.id}-${i}">
+            ${getStatusBadge(v)}
+            ${v.enviadoFaturamentoAt ? `<div style="font-size:9px;color:#7c3aed;font-weight:600;margin-top:3px;">✈ Enviado ${v.enviadoFaturamentoAt}</div>` : ''}
+          </td>
+          <td>
+            ${v.nfRetornoFile && !v.enviadoFaturamentoAt ? `
+              <button class="pdf-btn" style="background:#7c3aed;color:#fff;border-color:#7c3aed;font-size:10px;white-space:nowrap;"
+                onclick="enviarFaturamento('${p.id}',${i})"
+                title="PDF da NF Retorno anexado — clique para enviar ao faturamento">
+                ✈ Faturamento
+              </button>` : (v.enviadoFaturamentoAt ? `<span style="font-size:9px;color:#7c3aed;font-weight:700;">✅ Enviado</span>` : '<span style="font-size:9px;color:var(--text-muted);">Aguardando PDF</span>')}
+          </td>
         </tr>`;
       }
     }
@@ -2703,6 +2773,272 @@ function downloadFicha(filename) {
   document.body.removeChild(a);
 }
 
+
+// ══════════════════════════════════════════
+// PREVISÃO DE VAGÕES
+// ══════════════════════════════════════════
+const DB_PREVISAO = { items: [], _nextId: 1 };
+
+const PrevisaoAPI = {
+  list() { return DB_PREVISAO.items; },
+  async loadAll() {
+    try {
+      const snap = await db.collection('previsaoVagoes').orderBy('data','asc').get();
+      DB_PREVISAO.items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) { console.error('PrevisaoAPI.loadAll:', e); }
+    return DB_PREVISAO.items;
+  },
+  async save(data) {
+    if (data.id) {
+      await db.collection('previsaoVagoes').doc(data.id).update(data);
+    } else {
+      const ref = await db.collection('previsaoVagoes').add(data);
+      data.id = ref.id;
+    }
+    await this.loadAll();
+  },
+  async delete(id) {
+    await db.collection('previsaoVagoes').doc(id).delete();
+    await this.loadAll();
+  }
+};
+
+let editingPrevisaoId = null;
+let deletingPrevisaoId = null;
+
+function openPrevisaoModal(id = null) {
+  editingPrevisaoId = id;
+  document.getElementById('modal-previsao-title').textContent = id ? 'Editar Previsão' : 'Nova Previsão';
+  document.getElementById('pv-id').value = id || '';
+
+  // Populate terminal select
+  const pvT = document.getElementById('pv-terminal');
+  pvT.innerHTML = '<option value="">Selecione o terminal...</option>' +
+    DB.customProfiles.filter(p=>p.baseRole==='terminal')
+      .map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+
+  if (id) {
+    const pv = PrevisaoAPI.list().find(x => x.id === id);
+    if (pv) {
+      document.getElementById('pv-data').value    = pv.data || '';
+      document.getElementById('pv-encoste').value = pv.encoste || '';
+      document.getElementById('pv-hora').value    = pv.hora || '';
+      document.getElementById('pv-qtd').value     = pv.qtd || '';
+      document.getElementById('pv-terminal').value= pv.terminal || '';
+    }
+  } else {
+    ['pv-data','pv-hora','pv-qtd'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('pv-encoste').selectedIndex  = 0;
+    document.getElementById('pv-terminal').selectedIndex = 0;
+  }
+  openModal('modal-previsao');
+}
+
+async function savePrevisao() {
+  const id       = document.getElementById('pv-id').value;
+  const data     = document.getElementById('pv-data').value;
+  const encoste  = document.getElementById('pv-encoste').value;
+  const hora     = document.getElementById('pv-hora').value;
+  const qtd      = parseInt(document.getElementById('pv-qtd').value);
+  const terminal = document.getElementById('pv-terminal').value;
+
+  if (!data || !encoste || !hora || !qtd || !terminal) { toast('Preencha todos os campos.', true); return; }
+
+  showLoading('Salvando previsão...');
+  try {
+    const payload = {
+      data, encoste, hora, qtd, terminal,
+      lancadoEm: fmtDateTime(),
+      lancadoPor: currentUser.nome || currentUser.email,
+      updatedAt: fmtDateTime(),
+    };
+    if (id) payload.id = id;
+    await PrevisaoAPI.save(payload);
+    closeModal('modal-previsao');
+    renderPrevisao();
+    toast('Previsão salva com sucesso.');
+  } catch(e) { toast('Erro: ' + e.message, true); }
+  finally { hideLoading(); }
+}
+
+function openDeletePrevisao(id) {
+  deletingPrevisaoId = id;
+  openModal('modal-del-previsao');
+}
+
+async function confirmDeletePrevisao() {
+  showLoading('Excluindo...');
+  try {
+    await PrevisaoAPI.delete(deletingPrevisaoId);
+    closeModal('modal-del-previsao');
+    renderPrevisao();
+    toast('Previsão excluída.');
+  } catch(e) { toast('Erro: ' + e.message, true); }
+  finally { hideLoading(); deletingPrevisaoId = null; }
+}
+
+function renderPrevisao() {
+  const tbody = document.getElementById('previsao-body');
+  if (!tbody) return;
+  const items = PrevisaoAPI.list();
+
+  // Filter by terminal for terminal users
+  let filtered = items;
+  if (!can('canSeeAll') && can('canViewPrevisao')) {
+    const userTerminal = (currentUser.terminalName || '').toLowerCase().trim();
+    if (userTerminal) filtered = items.filter(pv => (pv.terminal||'').toLowerCase().trim() === userTerminal);
+  }
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">Nenhuma previsão cadastrada.</td></tr>';
+    return;
+  }
+
+  const canEdit = can('canEditPrevisao');
+  tbody.innerHTML = filtered.map(pv => `
+    <tr style="border-bottom:1px solid #edf0f8;">
+      <td style="padding:8px 10px;font-weight:600;color:var(--blue);">${fmtDate(pv.data)}</td>
+      <td style="padding:8px 10px;"><span style="background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">${esc(pv.encoste||'')}</span></td>
+      <td style="padding:8px 10px;">${esc(pv.hora||'')}</td>
+      <td style="padding:8px 10px;text-align:center;font-weight:700;">${pv.qtd||''}</td>
+      <td style="padding:8px 10px;"><span class="terminal-badge">${esc(pv.terminal||'')}</span></td>
+      <td style="padding:8px 10px;font-size:11px;color:var(--text-muted);">${esc(pv.lancadoEm||'')}${pv.updatedAt && pv.updatedAt !== pv.lancadoEm ? '<br><span style=\'color:#7c3aed;\'>Editado: '+esc(pv.updatedAt)+'</span>' : ''}</td>
+      <td style="padding:8px 10px;">
+        ${canEdit ? `
+        <div class="action-icons">
+          <button class="icon-btn" onclick="openPrevisaoModal('${pv.id}')" title="Editar">✏️</button>
+          <button class="icon-btn del" onclick="openDeletePrevisao('${pv.id}')" title="Excluir">🗑️</button>
+        </div>` : '<span style="font-size:10px;color:var(--text-muted);">Somente leitura</span>'}
+      </td>
+    </tr>`).join('');
+}
+
+// ══════════════════════════════════════════
+// ENVIAR PARA FATURAMENTO (MAILTO)
+// ══════════════════════════════════════════
+async function enviarFaturamento(progId, vagaoIdx) {
+  const prog = ProgAPI.list().find(p => p.id === progId);
+  if (!prog) return;
+  const v = prog.vagoes[vagaoIdx];
+  if (!v) return;
+
+  const dataAtual = fmtDateTime();
+  const vagaoNum  = v.vagao || '?';
+  const terminal  = prog.terminal || '?';
+  const dataFmt   = fmtDate(prog.data);
+
+  const subject = encodeURIComponent(
+    `FATURAMENTO FERROVIÁRIO - VAGÃO ${vagaoNum} - TERMINAL ${terminal} - DATA ${dataFmt}`);
+
+  const body = encodeURIComponent(
+`SOLICITAÇÃO DE FATURAMENTO FERROVIÁRIO
+
+Pedido:       ${prog.pedido}
+Produto:      ${prog.produto}
+Usina/Filial: ${prog.usina}
+Cliente:      ${prog.cliente}
+Local Entrega:${prog.local}
+Terminal:     ${terminal}
+Data Prog.:   ${dataFmt}
+Encoste:      ${prog.encoste || '—'}
+
+DADOS DO VAGÃO:
+Vagão Nº:     ${vagaoNum}
+NF Retorno:   ${v.nfRetorno || '—'}
+Volume (m³):  ${v.volume || '—'}
+Lacre:        ${v.lacre || '—'}
+
+Data/Hora:    ${dataAtual}
+
+${v.nfRetornoFile ? 'ANEXO: ' + v.nfRetornoFile : 'Obs: NF de Retorno deve ser anexada manualmente ao e-mail.'}
+
+---
+Enviado pelo sistema de Programações Ferroviárias Inpasa.`);
+
+  const to = 'atendimento.externo@inpasa.com.br;csc.faturamento@inpasa.com.br;csc@elosinpasa.com.br;rafael.mulato@inpasa.com.br;kemelyn.penha@inpasa.com.br';
+  const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
+
+  // Open mailto
+  window.location.href = mailto;
+
+  // Mark as enviado after short delay (so mailto opens first)
+  setTimeout(async () => {
+    v.enviadoFaturamentoAt = dataAtual;
+    // Update status to "Enviado p/ Faturamento"
+    if (v.vid) {
+      try {
+        await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: dataAtual });
+      } catch(e) { console.warn('enviarFaturamento save:', e); }
+    }
+    renderTable();
+    toast('✈ E-mail de faturamento aberto! Vagão marcado como enviado.');
+  }, 1500);
+}
+
+// ══════════════════════════════════════════
+// PER-PROG EXCEL AND ZIP EXPORT
+// ══════════════════════════════════════════
+function exportExcelProg(progId) {
+  const p = ProgAPI.list().find(x => x.id === progId);
+  if (!p) { toast('Programação não encontrada.', true); return; }
+
+  const rows = [['Data Prog.','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Vagão Nº','NF Retorno','Volume (m³)','Lacre','NF Inpasa','Status','Enviado Faturamento']];
+  for (const v of p.vagoes) {
+    let status = 'Aguardando encoste';
+    if (v.enviadoFaturamentoAt) status = 'Enviado p/ Faturamento';
+    else if ((v.nfInpasa||'').trim()) status = 'Concluído';
+    else if ((v.nfRetorno||'').trim()) status = 'Ag. faturamento';
+    else if ((v.vagao||'').trim()) status = 'Em carregamento';
+    rows.push([fmtDate(p.data),p.pedido,p.encoste||'',p.produto,p.usina,p.cliente,p.local,p.terminal||'',v.vagao||'',v.nfRetorno||'',v.volume||'',v.lacre||'',v.nfInpasa||'',status,v.enviadoFaturamentoAt||'']);
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:10},{wch:10},{wch:18},{wch:22},{wch:22},{wch:22},{wch:14},{wch:12},{wch:14},{wch:10},{wch:12},{wch:14},{wch:18},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Programação');
+  const ds = fmtDate(p.data).replace(/\//g,'');
+  XLSX.writeFile(wb, `Inpasa_Pedido${p.pedido}_${ds}.xlsx`);
+  toast('Excel gerado!');
+}
+
+async function exportZipProg(progId) {
+  const p = ProgAPI.list().find(x => x.id === progId);
+  if (!p) { toast('Programação não encontrada.', true); return; }
+
+  const hasFiles = p.vagoes.some(v => v.nfRetornoFileObj || v.nfInpasaFileObj || v.laudoFileObj);
+  if (!hasFiles) { toast('Nenhum PDF anexado nesta programação.', true); return; }
+
+  showLoading('Gerando ZIP...');
+  try {
+    const zip = new JSZip();
+    const safe = s => (s||'').replace(/[\/\\:*?"<>|]/g,'_').trim() || 'sem_nome';
+    const folderName = safe(`Pedido${p.pedido}_${fmtDate(p.data)}`);
+    const retFolder  = zip.folder(`${folderName}/NF_Retorno`);
+    const inpFolder  = zip.folder(`${folderName}/NF_Inpasa`);
+    const laudoFolder= zip.folder(`${folderName}/Laudos`);
+
+    for (let i = 0; i < p.vagoes.length; i++) {
+      const v = p.vagoes[i];
+      const vagaoLabel = safe(v.vagao || `Vagao_${i+1}`);
+      if (v.nfRetornoFileObj) retFolder.file(`NF_Retorno_${vagaoLabel}.pdf`, v.nfRetornoFileObj);
+      else if (v.nfRetornoFile && v.vid) {
+        try { const blob = await StorageAPI.getPdfBlob(p.id, v.vid, 'retorno'); if(blob) retFolder.file(`NF_Retorno_${vagaoLabel}.pdf`, blob); } catch(e){}
+      }
+      if (v.nfInpasaFileObj) inpFolder.file(`NF_Inpasa_${vagaoLabel}.pdf`, v.nfInpasaFileObj);
+      if (v.laudoFileObj) laudoFolder.file(`Laudo_${vagaoLabel}.pdf`, v.laudoFileObj);
+    }
+
+    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${folderName}.zip`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    toast('ZIP gerado!');
+  } catch(e) { toast('Erro ao gerar ZIP: ' + e.message, true); }
+  finally { hideLoading(); }
+}
+
 // ══════════════════════════════════════════
 // EXPAND / COLLAPSE ALL
 // ══════════════════════════════════════════
@@ -2935,6 +3271,7 @@ function populateRoleSelects() {
     { value:'inpasa',   label:'Inpasa' },
     { value:'terminal', label:'Terminal (genérico)' },
     { value:'csc',      label:'CSC' },
+    { value:'rumo',     label:'Rumo (Transportadora)' },
   ];
   const custom = DB.customProfiles.map(p=>({ value:p.roleKey, label:p.name + ' ('+( {terminal:'Terminal',csc:'CSC',inpasa:'Inpasa'}[p.baseRole]||p.baseRole)+')' }));
   const options = [...builtIn, ...custom].map(o=>`<option value="${o.value}">${o.label}</option>`).join('');
