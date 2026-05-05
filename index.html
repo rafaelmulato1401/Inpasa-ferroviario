@@ -620,10 +620,10 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 
   <div class="content">
     <div class="tabs">
-      <div class="tab active" data-tab="prog" onclick="switchTab('prog')">Programações</div>
-      <div class="tab" data-tab="users" id="tab-users" style="display:none;" onclick="switchTab('users')">Usuários</div>
-      <div class="tab" data-tab="profiles" id="tab-profiles" style="display:none;" onclick="switchTab('profiles')">Perfis</div>
       <div class="tab" data-tab="previsao" id="tab-previsao" style="display:none;" onclick="switchTab('previsao')">Previsão de Vagões</div>
+      <div class="tab active" data-tab="prog" onclick="switchTab('prog')">Programações</div>
+      <div class="tab" data-tab="profiles" id="tab-profiles" style="display:none;" onclick="switchTab('profiles')">Perfis</div>
+      <div class="tab" data-tab="users" id="tab-users" style="display:none;" onclick="switchTab('users')">Usuários</div>
     </div>
 
     <!-- TAB: Programações -->
@@ -683,7 +683,6 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th class="hide-mobile">Usina/Filial</th>
                 <th class="hide-mobile">Cliente</th>
                 <th class="hide-mobile">Local entrega</th>
-                <th style="text-align:center;width:50px">Vag.</th>
                 <th style="width:100px">Vagão Nº</th>
                 <th style="width:90px">NF Retorno</th>
                 <th style="width:80px">Volume (m³)</th>
@@ -1733,6 +1732,7 @@ async function doLogin() {
 document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
 
 async function doLogout() {
+  stopRealtimeListeners();
   try { await auth.signOut(); } catch(e) {}
   currentUser = null;
   window._masterPass = '';
@@ -1780,6 +1780,8 @@ async function initApp() {
 
   switchTab('prog');
   renderTable();
+  // Start real-time listeners AFTER initial load
+  setTimeout(() => startRealtimeListeners(), 500);
 }
 
 function getRoleDisplayName(role) {
@@ -2206,8 +2208,7 @@ function renderTable() {
           <td class="hide-mobile">${esc(p.usina)}</td>
           <td class="hide-mobile">${esc(p.cliente)}</td>
           <td class="hide-mobile">${esc(p.local)}</td>
-          <td style="text-align:center;">${p.qtd}</td>
-          <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;">${p.collapsed?'Clique na seta para expandir':''}</td>
+          <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;"><span style="background:#e8eef8;color:#1a3a6b;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-right:8px;">${p.qtd} vag.</span>${p.collapsed?'Clique na seta para expandir':''}</td>
           <td></td>
           <td>
             <div class="action-icons">
@@ -2258,7 +2259,7 @@ function renderTable() {
         const completedStyle = isCompleted ? 'background:#f0fdf4;' : '';
 
         html += `<tr class="row-vagao" style="${completedStyle}">
-          <td class="sub-lbl" colspan="8" style="padding-left:48px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
+          <td class="sub-lbl" colspan="7" style="padding-left:48px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
               type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
@@ -3029,6 +3030,84 @@ function downloadFicha(filename) {
   document.body.removeChild(a);
 }
 
+
+
+// ══════════════════════════════════════════
+// REAL-TIME LISTENERS (Firestore onSnapshot)
+// Updates UI instantly when any user makes changes
+// ══════════════════════════════════════════
+let _unsubProgs    = null; // unsubscribe function for programacoes
+let _unsubPrevisao = null; // unsubscribe function for previsaoVagoes
+let _realtimeActive = false;
+
+async function startRealtimeListeners() {
+  if (_realtimeActive) return;
+  _realtimeActive = true;
+
+  // ── Programações listener ──
+  let q = db.collection('programacoes').orderBy('data','desc');
+  // Terminal filter
+  if (!can('canSeeAll')) {
+    const tf = (currentUser.terminalName || '').trim();
+    if (tf) q = q.where('terminal','==', tf);
+  }
+
+  _unsubProgs = q.onSnapshot(async snap => {
+    // Rebuild programacoes from snapshot
+    const newProgs = snap.docs.map(d => ({
+      id: d.id,
+      collapsed: (DB.programacoes.find(p=>p.id===d.id)||{}).collapsed || false,
+      vagoes: (DB.programacoes.find(p=>p.id===d.id)||{}).vagoes || [],
+      ...d.data()
+    }));
+
+    // Load vagoes only for new/changed docs
+    const changed = snap.docChanges().filter(c => c.type !== 'removed');
+    await Promise.all(changed.map(async c => {
+      const prog = newProgs.find(p => p.id === c.doc.id);
+      if (!prog) return;
+      try {
+        const vSnap = await db.collection('programacoes').doc(prog.id)
+          .collection('vagoes').orderBy('idx','asc').get();
+        prog.vagoes = vSnap.docs.map(v => ({
+          vid: v.id,
+          vagao:'', nfRetorno:'', lacre:'', nfInpasa:'', volume:'',
+          nfRetornoFile:null, nfRetornoFileObj:null,
+          nfInpasaFile:null, nfInpasaFileObj:null,
+          nfRetornoPath:null, nfInpasaPath:null,
+          nfRetornoUrl:null, nfInpasaUrl:null,
+          nfRetornoAt:null, nfInpasaAt:null,
+          laudoFile:null, laudoAt:null, laudoFileObj:null,
+          enviadoFaturamentoAt:null,
+          fichaFile:null, fichaAt:null,
+          ...v.data()
+        }));
+      } catch(e) { console.warn('vagoes load:', e); }
+    }));
+
+    DB.programacoes = newProgs;
+    renderTable();
+  }, err => console.warn('progs listener error:', err));
+
+  // ── Previsão listener ──
+  _unsubPrevisao = db.collection('previsaoVagoes')
+    .orderBy('data','asc')
+    .onSnapshot(snap => {
+      DB_PREVISAO.items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Only re-render if previsao tab is active
+      if (document.getElementById('tab-previsao-content')?.style.display !== 'none') {
+        renderPrevisao();
+      }
+    }, err => console.warn('previsao listener error:', err));
+
+  console.log('✅ Real-time listeners started');
+}
+
+function stopRealtimeListeners() {
+  if (_unsubProgs)    { _unsubProgs();    _unsubProgs    = null; }
+  if (_unsubPrevisao) { _unsubPrevisao(); _unsubPrevisao = null; }
+  _realtimeActive = false;
+}
 
 // ══════════════════════════════════════════
 // PREVISÃO DE VAGÕES
