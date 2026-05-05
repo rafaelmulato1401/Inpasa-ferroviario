@@ -2185,7 +2185,23 @@ function renderTable() {
                 onclick="enviarFaturamento('${p.id}',${i})"
                 title="PDF da NF Retorno anexado — clique para enviar ao faturamento">
                 ✈ Faturamento
-              </button>` : (v.enviadoFaturamentoAt ? `<span style="font-size:9px;color:#7c3aed;font-weight:700;">✅ Enviado</span>` : '<span style="font-size:9px;color:var(--text-muted);">Aguardando PDF</span>')}
+              </button>`
+            : v.enviadoFaturamentoAt && v.nfRetornoFile ? `
+              <div style="display:flex;flex-direction:column;gap:2px;">
+                <span style="font-size:9px;color:#7c3aed;font-weight:700;">✅ Enviado</span>
+                <span style="font-size:9px;color:var(--text-muted);">${v.enviadoFaturamentoAt}</span>
+                <button class="pdf-btn" style="font-size:9px;color:#7c3aed;border-color:#7c3aed;padding:1px 6px;margin-top:2px;"
+                  onclick="reenviarFaturamento('${p.id}',${i})"
+                  title="Clique para reenviar para faturamento">
+                  🔄 Reenviar
+                </button>
+              </div>`
+            : v.enviadoFaturamentoAt && !v.nfRetornoFile ? `
+              <div style="display:flex;flex-direction:column;gap:2px;">
+                <span style="font-size:9px;color:#92400e;font-weight:700;">⚠️ PDF removido</span>
+                <span style="font-size:9px;color:var(--text-muted);">Reanexa o PDF para reenviar</span>
+              </div>`
+            : '<span style="font-size:9px;color:var(--text-muted);">Aguardando PDF</span>'}
           </td>
         </tr>`;
       }
@@ -2213,6 +2229,11 @@ async function removePdf(progId, idx, type) {
       }
       v.nfRetornoFile=null; v.nfRetornoFileObj=null; v.nfRetornoPath=null; v.nfRetornoUrl=null;
       v.nfRetorno=''; v.vagao=''; v.lacre='';
+      // Reset faturamento status since PDF was removed
+      v.enviadoFaturamentoAt = null;
+      if (v.vid) {
+        try { await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: null }); } catch(e){}
+      }
     } else {
       if (v.vid) {
         try { await db.collection('programacoes').doc(progId).collection('vagoes').doc(v.vid).collection('pdfData').doc('inpasa').delete(); } catch(e){}
@@ -3168,6 +3189,18 @@ async function exportZipProg(progId) {
     toast('ZIP gerado!');
   } catch(e) { toast('Erro ao gerar ZIP: ' + e.message, true); }
   finally { hideLoading(); }
+}
+
+// ══════════════════════════════════════════
+// REENVIAR PARA FATURAMENTO
+// ══════════════════════════════════════════
+async function reenviarFaturamento(progId, vagaoIdx) {
+  const confirmed = confirm('Enviar novamente para faturamento?\n\nUm novo e-mail será gerado com os dados atuais do vagão.');
+  if (!confirmed) return;
+  // Reset the sent status so enviarFaturamento runs fresh
+  const prog = ProgAPI.list().find(p => p.id === progId);
+  if (prog) prog.vagoes[vagaoIdx].enviadoFaturamentoAt = null;
+  await enviarFaturamento(progId, vagaoIdx);
 }
 
 // ══════════════════════════════════════════
