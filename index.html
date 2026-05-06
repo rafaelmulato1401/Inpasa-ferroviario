@@ -3266,11 +3266,12 @@ function openNovaProg() {
 
 function npAddPedido() {
   _npPedidoCount++;
-  const idx = _npPedidoCount;
+  const idx  = _npPedidoCount;
   const wrap = document.getElementById('np-pedidos-wrap');
-  const div = document.createElement('div');
-  div.className = 'np-pedido-card';
-  div.id = `np-pedido-${idx}`;
+  const div  = document.createElement('div');
+  div.className  = 'np-pedido-card';
+  div.id         = `np-pedido-${idx}`;
+  div.dataset.idx = idx;   // ← key fix: store idx as data attribute
   div.innerHTML = `
     <div class="np-pedido-num">Pedido ${idx}</div>
     ${idx > 1 ? `<button class="np-remove-pedido" onclick="npRemovePedido(${idx})" title="Remover este pedido">🗑</button>` : ''}
@@ -3327,13 +3328,13 @@ async function saveNovaProg() {
 
   if (!data) { toast('Informe a data da programação.', true); return; }
 
-  // Collect all pedidos — using for loop (not forEach) so return works correctly
+  // Collect all pedidos using data-idx attribute
   const cards = Array.from(document.querySelectorAll('.np-pedido-card'));
   const pedidos = [];
 
   for (let i = 0; i < cards.length; i++) {
-    const card = cards[i];
-    const idx     = card.id.replace('np-pedido-','');
+    const card    = cards[i];
+    const idx     = card.dataset.idx;
     const pedido  = (document.getElementById(`np-pedido-${idx}`)?.value  || '').trim();
     const produto = (document.getElementById(`np-produto-${idx}`)?.value || '').trim();
     const usina   = (document.getElementById(`np-usina-${idx}`)?.value   || '').trim();
@@ -3344,7 +3345,7 @@ async function saveNovaProg() {
 
     if (!pedido || !produto || !usina || !cliente || !local || !qtd || qtd < 1) {
       toast(`Pedido ${i+1}: preencha todos os campos obrigatórios.`, true);
-      return; // now correctly stops the function
+      return;
     }
     pedidos.push({ pedido, produto, usina, encoste, cliente, local, qtd });
   }
@@ -3353,18 +3354,13 @@ async function saveNovaProg() {
 
   showLoading(`Salvando ${pedidos.length} pedido(s)...`);
   try {
-    // Save each pedido — skip loadAll to avoid conflicts with real-time listener
     for (const p of pedidos) {
       const { qtd, ...rest } = p;
       const ref = await db.collection('programacoes').add({
-        ...rest,
-        data,
-        terminal,
-        qtd,
+        ...rest, data, terminal, qtd,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         createdBy: currentUser?.uid || '',
       });
-      // Create vagoes subcollection
       const batch = db.batch();
       for (let i = 0; i < qtd; i++) {
         const vRef = db.collection('programacoes').doc(ref.id).collection('vagoes').doc();
@@ -3377,8 +3373,7 @@ async function saveNovaProg() {
       await batch.commit();
     }
     closeModal('modal-nova-prog');
-    toast(`✅ ${pedidos.length} pedido(s) criado(s)! A tabela atualizará automaticamente.`);
-    // Manual reload in case real-time listener hasn't fired yet
+    toast(`✅ ${pedidos.length} pedido(s) criado(s)!`);
     setTimeout(async () => {
       const tf = (!can('canSeeAll') && currentUser?.terminalName) ? currentUser.terminalName : null;
       await ProgAPI.loadAll(tf);
