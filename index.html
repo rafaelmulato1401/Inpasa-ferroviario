@@ -744,7 +744,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th class="hide-mobile">Local entrega</th>
                 <th style="width:100px">Vagão Nº</th>
                 <th style="width:90px">NF Retorno</th>
-                <th style="width:80px">Volume (m³)</th>
+                <th style="width:80px">Volume (L)</th>
                 <th class="hide-mobile" style="width:80px">Lacre</th>
                 <th style="width:90px">NF Inpasa</th>
                 <th style="width:80px">Laudo</th>
@@ -2447,7 +2447,7 @@ function renderTable() {
             ${retHtml}
             ${v.nfRetornoAt ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">📅 ${v.nfRetornoAt}</div>` : ''}
           </div></td>
-          <td style="width:80px"><input class="inline-input" type="text" placeholder="Volume m³"
+          <td style="width:80px"><input class="inline-input" type="text" placeholder="Volume (L)"
             value="${esc(v.volume||'')}" ${!canR?'disabled':''}
             oninput="handleInlineInput('${p.id}',${i},'volume',this.value)"></td>
           <td class="hide-mobile"><input class="inline-input" type="text" placeholder="Lacre" value="${esc(v.lacre)}" ${!canL?'disabled':''}
@@ -2745,11 +2745,11 @@ function extractVolume(text) {
   // Padrão 1: linha da NF com "M3" e "L" (NF tipo Ultracargo)
   // Ex: "M3 L 104,761 104.761,000 3.500,0000"
   const p1 = text.match(/\bM[3³]\b[\s\S]{0,30}?\bL\b\s+(\d{1,3}[,.]\d{3})/i);
-  if (p1) { const n = toNum(p1[1]); if (n) return n.toFixed(3); }
+  if (p1) { const n = toNum(p1[1]); if (n) return Math.round(n).toString(); }
 
   // Padrão 2: QTD. COM QTD. TRIB (NF tipo Ultracargo variante)
   const p2 = text.match(/QTD\.?\s*COM[\s\S]{0,300}?(\d{1,3}[,.]\d{3}(?:[,.]\d{3})?)/i);
-  if (p2) { const n = toNum(p2[1]); if (n) return n.toFixed(3); }
+  if (p2) { const n = toNum(p2[1]); if (n) return Math.round(n).toString(); }
 
   // Padrão 3: QUANTID com múltiplas linhas (NF tipo Teciap)
   // Captura padrão: "L <quantidade> <preço_unitário>"
@@ -2762,12 +2762,12 @@ function extractVolume(text) {
       const n = toNum(m[1]);
       if (n) { total += n; found = true; }
     }
-    if (found && total > 1) return total.toFixed(3);
+    if (found && total > 1) return Math.round(total).toString();
   }
 
   // Padrão 4: fallback — número grande próximo de M3/M³
   const p4 = text.match(/(\d{1,3}[,.]\d{3})\s*M[3³]/i);
-  if (p4) { const n = toNum(p4[1]); if (n) return n.toFixed(3); }
+  if (p4) { const n = toNum(p4[1]); if (n) return Math.round(n).toString(); }
 
   return null;
 }
@@ -2832,7 +2832,7 @@ async function processPdf(file, type) {
           </div>
         </div>
         <div class="form-field"><label>Número da NF de Retorno (DANFE)</label><input type="text" id="pe-nfret" value="${nfNum||''}" placeholder="Não identificado — insira manualmente"></div>
-        <div class="form-field"><label>Volume (m³)</label><input type="text" id="pe-volume" value="${volume||''}" placeholder="Ex: 104.761"></div>
+        <div class="form-field"><label>Volume (L)</label><input type="text" id="pe-volume" value="${volume||''}" placeholder="Ex: 104.761"></div>
         <div class="form-field"><label>Lacre</label><input type="text" id="pe-lacre" value="${lacre||''}" placeholder="Não identificado — insira manualmente"></div>`;
       const warn = document.getElementById('pdf-warn');
       const cnpjOk = pdfExtracted?.cnpjOk !== false;
@@ -2879,7 +2879,7 @@ async function processPdf(file, type) {
           <div id="pe-vagao-hint" class="field-hint">O número do vagão deve ter exatamente 7 dígitos.</div>
         </div>
         <div class="form-field"><label>Número da NF de Retorno (DANFE)</label><input type="text" id="pe-nfret" value="" placeholder="Digite o número da NF"></div>
-        <div class="form-field"><label>Volume (m³)</label><input type="text" id="pe-volume" value="" placeholder="Ex: 104.761"></div>
+        <div class="form-field"><label>Volume (L)</label><input type="text" id="pe-volume" value="" placeholder="Ex: 104.761"></div>
         <div class="form-field"><label>Lacre</label><input type="text" id="pe-lacre" value="" placeholder="Digite o lacre"></div>`;
     } else {
       document.getElementById('pdf-extracted-fields').innerHTML = `
@@ -3057,7 +3057,7 @@ async function saveEditUser() {
   showLoading('Salvando...');
   try {
     const terminalName = (role === 'terminal' || role.startsWith('terminal_'))
-      ? (document.getElementById('eu-terminalname')?.value.trim() || '')
+      ? (document.getElementById('eu-terminalname')?.value.trim() || role.replace('terminal_',''))
       : '';
     const fields = { nome, email, role, terminalName };
     await AuthAPI.updateUser(id, fields);
@@ -3160,7 +3160,16 @@ async function renderUsers() {
 function toggleTerminalName(prefix) {
   const role = document.getElementById(prefix+'-role').value;
   const wrap = document.getElementById(prefix+'-terminalname-wrap');
-  if (wrap) wrap.style.display = (role === 'terminal') ? 'block' : 'none';
+  const isTerminal = role === 'terminal' || role.startsWith('terminal_');
+  if (wrap) wrap.style.display = isTerminal ? 'block' : 'none';
+  // Auto-fill from custom profile role key (e.g. terminal_ultracargo → Ultracargo)
+  if (isTerminal && role.startsWith('terminal_')) {
+    const tnInput = document.getElementById(prefix+'-terminalname');
+    if (tnInput && !tnInput.value) {
+      const autoName = role.replace('terminal_','').replace(/_/g,' ');
+      tnInput.value = autoName.charAt(0).toUpperCase() + autoName.slice(1);
+    }
+  }
 }
 // ══════════════════════════════════════════
 // MEU PERFIL — usuário edita o próprio cadastro
@@ -3594,7 +3603,7 @@ function extractFromCT(text) {
     const m = t.match(/Vol\.?\s*(?:20\s*°C|Faturado)\s*\(L\)[:\s]*([\d.,]+)/i);
     if (!m) return null;
     let v = m[1].replace(/\./g,'').replace(',','.');
-    return parseFloat(v) > 0 ? parseFloat(v).toFixed(3) : null;
+    return parseFloat(v) > 0 ? Math.round(parseFloat(v)).toString() : null;
   })();
   return { vagao, lacre, nf, volume };
 }
@@ -3708,7 +3717,7 @@ function nlUpdatePreview() {
   else if (vagaoStr) rows += ` <span style="color:var(--red);font-weight:600;">→ não encontrado nesta programação</span>`;
   rows += '</div>';
   rows += `<div>🔒 <strong>Lacre:</strong> ${lacre || '<em style="color:var(--text-muted)">não identificado</em>'}</div>`;
-  if (volume) rows += `<div>📦 <strong>Volume:</strong> ${volume} m³</div>`;
+  if (volume) rows += `<div>📦 <strong>Volume:</strong> ${volume} L</div>`;
 
   body.innerHTML = rows;
   preview.style.display = 'block';
@@ -4088,7 +4097,7 @@ Encoste:       ${prog.encoste || '—'}
 DADOS DO VAGÃO:
 Vagão Nº:      ${v.vagao    || '—'}
 NF de Retorno: ${v.nfRetorno|| '—'}
-Volume (m³):   ${v.volume   || '—'}
+Volume (L):    ${v.volume   || '—'}
 Lacre:         ${v.lacre    || '—'}
 
 Data/Hora:     ${dataAtual}
@@ -4217,7 +4226,7 @@ function exportExcelProg(progId) {
   const p = ProgAPI.list().find(x => x.id === progId);
   if (!p) { toast('Programação não encontrada.', true); return; }
 
-  const rows = [['Data','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Vagão Nº','NF Retorno','Volume (m³)','Lacre','NF Inpasa','Status','Enviado Faturamento']];
+  const rows = [['Data','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Vagão Nº','NF Retorno','Volume (L)','Lacre','NF Inpasa','Status','Enviado Faturamento']];
   for (const v of p.vagoes) {
     let status = 'Aguardando encoste';
     if (v.enviadoFaturamentoAt) status = 'Enviado p/ Faturamento';
@@ -4306,7 +4315,7 @@ async function exportZipProg(progId) {
 function exportExcel() {
   const progs = ProgAPI.list();
   if (!progs.length) { toast('Nenhuma programação para exportar.',true); return; }
-  const rows = [['Data Prog.','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Total Vagões','Vagão Nº','Nº NF Retorno','Volume (m³)','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Anexo em','Status']];
+  const rows = [['Data Prog.','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Total Vagões','Vagão Nº','Nº NF Retorno','Volume (L)','Lacre','Nº NF Inpasa','PDF NF Retorno','PDF NF Inpasa','Anexo em','Status']];
   for (const p of progs) {
     for (let i=0; i<p.vagoes.length; i++) {
       const v=p.vagoes[i];
