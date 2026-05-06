@@ -3775,6 +3775,82 @@ async function removeVagaoDoc(progId, vagaoIdx, type) {
 // ══════════════════════════════════════════
 // EXPORT EXCEL
 // ══════════════════════════════════════════
+// ══════════════════════════════════════════
+// PER-PROG EXCEL AND ZIP EXPORT
+// ══════════════════════════════════════════
+function exportExcelProg(progId) {
+  const p = ProgAPI.list().find(x => x.id === progId);
+  if (!p) { toast('Programação não encontrada.', true); return; }
+
+  const rows = [['Data','Nº Pedido','Encoste','Produto','Usina / Filial','Cliente','Local Entrega','Terminal','Vagão Nº','NF Retorno','Volume (m³)','Lacre','NF Inpasa','Status','Enviado Faturamento']];
+  for (const v of p.vagoes) {
+    let status = 'Aguardando encoste';
+    if (v.enviadoFaturamentoAt) status = 'Enviado p/ Faturamento';
+    else if ((v.nfInpasa||'').trim()) status = 'Concluído';
+    else if ((v.nfRetorno||'').trim()) status = 'Ag. faturamento';
+    else if ((v.vagao||'').trim()) status = 'Em carregamento';
+    rows.push([fmtDate(p.data),p.pedido,p.encoste||'',p.produto,p.usina,p.cliente,p.local,p.terminal||'',v.vagao||'',v.nfRetorno||'',v.volume||'',v.lacre||'',v.nfInpasa||'',status,v.enviadoFaturamentoAt||'']);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:10},{wch:10},{wch:18},{wch:22},{wch:22},{wch:22},{wch:14},{wch:12},{wch:14},{wch:10},{wch:12},{wch:14},{wch:18},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Programação');
+  const ds = fmtDate(p.data).replace(/\//g,'');
+  XLSX.writeFile(wb, `Inpasa_Pedido${p.pedido}_${ds}.xlsx`);
+  toast('Excel gerado!');
+}
+
+async function exportZipProg(progId) {
+  const p = ProgAPI.list().find(x => x.id === progId);
+  if (!p) { toast('Programação não encontrada.', true); return; }
+
+  const hasFiles = p.vagoes.some(v => v.nfRetornoFile || v.nfInpasaFile || v.laudoFile);
+  if (!hasFiles) { toast('Nenhum PDF anexado nesta programação.', true); return; }
+
+  showLoading('Gerando ZIP...');
+  try {
+    const zip = new JSZip();
+    const safe = s => (s||'').replace(/[\/\\:*?"<>|]/g,'_').trim() || 'sem_nome';
+    const folderName  = safe(`Pedido${p.pedido}_${fmtDate(p.data)}`);
+    const retFolder   = zip.folder(`${folderName}/NF_Retorno`);
+    const inpFolder   = zip.folder(`${folderName}/NF_Inpasa`);
+    const laudoFolder = zip.folder(`${folderName}/Laudos`);
+
+    for (let i = 0; i < p.vagoes.length; i++) {
+      const v = p.vagoes[i];
+      const vagaoLabel = safe(v.vagao || `Vagao_${i+1}`);
+      if (v.nfRetornoFile) {
+        try {
+          const blob = v.nfRetornoFileObj
+            ? v.nfRetornoFileObj
+            : (v.vid ? await StorageAPI.getPdfBlob(p.id, v.vid, 'retorno') : null);
+          if (blob) retFolder.file(`NF_Retorno_${vagaoLabel}.pdf`, blob);
+        } catch(e) { console.warn('ZIP retorno:', e); }
+      }
+      if (v.nfInpasaFile) {
+        try {
+          const blob = v.nfInpasaFileObj
+            ? v.nfInpasaFileObj
+            : (v.vid ? await StorageAPI.getPdfBlob(p.id, v.vid, 'inpasa') : null);
+          if (blob) inpFolder.file(`NF_Inpasa_${vagaoLabel}.pdf`, blob);
+        } catch(e) { console.warn('ZIP inpasa:', e); }
+      }
+      if (v.laudoFile && v.laudoFileObj) {
+        laudoFolder.file(`Laudo_${vagaoLabel}.pdf`, v.laudoFileObj);
+      }
+    }
+
+    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${folderName}.zip`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    toast('ZIP gerado!');
+  } catch(e) { toast('Erro ao gerar ZIP: ' + e.message, true); }
+  finally { hideLoading(); }
+}
+
 function exportExcel() {
   const progs = ProgAPI.list();
   if (!progs.length) { toast('Nenhuma programação para exportar.',true); return; }
