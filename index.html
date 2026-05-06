@@ -359,6 +359,36 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 .doc-btn:disabled { opacity:.4; cursor:not-allowed; }
 
 
+
+.np-pedido-card {
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--white);
+  position: relative;
+}
+.np-pedido-card .np-pedido-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 10px;
+}
+.np-remove-pedido {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.np-remove-pedido:hover { background: #fee2e2; }
 /* Group rows: Date and Terminal */
 .row-group-date {
   background: var(--blue) !important;
@@ -383,6 +413,36 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 
 .row-prog { background: #f8faff; }
 
+
+.np-pedido-card {
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: var(--white);
+  position: relative;
+}
+.np-pedido-card .np-pedido-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 10px;
+}
+.np-remove-pedido {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.np-remove-pedido:hover { background: #fee2e2; }
 /* Group rows: Date and Terminal */
 .row-group-date {
   background: var(--blue) !important;
@@ -634,7 +694,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
           <div class="gold-bar"></div>
         </div>
         <div class="ch-right">
-          <button class="btn-primary" id="btn-nova" onclick="openProgModal()" style="display:none;"><span>+</span> Nova programação</button>
+          <button class="btn-primary" id="btn-nova" onclick="openNovaProg()" style="display:none;"><span>+</span> Nova programação</button>
         </div>
       </div>
 
@@ -903,6 +963,46 @@ tbody tr { border-bottom:1px solid #edf0f8; }
   </div>
 </div>
 
+
+
+<!-- ════ MODAL: Nova Programação em Lote ════ -->
+<div class="modal-overlay" id="modal-nova-prog">
+  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto;">
+    <div class="modal-head" style="position:sticky;top:0;z-index:10;">
+      <div class="modal-head-left"><h3>Nova Programação</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-nova-prog')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- DATA + TERMINAL (compartilhados por todos os pedidos) -->
+      <div style="background:#f0f4ff;border:1px solid #c8d4f0;border-radius:8px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Data e Terminal — comuns a todos os pedidos</div>
+        <div class="form-grid">
+          <div class="form-field"><label>Data da programação</label><input type="date" id="np-data"></div>
+          <div class="form-field">
+            <label>Terminal responsável</label>
+            <select id="np-terminal">
+              <option value="">Nenhum (visível a todos)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- PEDIDOS (dinâmicos) -->
+      <div id="np-pedidos-wrap"></div>
+
+      <!-- Botão adicionar pedido -->
+      <button class="btn-secondary" onclick="npAddPedido()"
+        style="width:100%;margin-top:8px;justify-content:center;border-style:dashed;">
+        <span style="font-size:16px;margin-right:6px;">+</span> Adicionar pedido
+      </button>
+    </div>
+    <div class="modal-footer" style="position:sticky;bottom:0;background:var(--white);z-index:10;">
+      <button class="btn-cancel-m" onclick="closeModal('modal-nova-prog')">Cancelar</button>
+      <button class="btn-ok" onclick="saveNovaProg()">💾 Salvar todos os pedidos</button>
+    </div>
+  </div>
+</div>
 
 <!-- ════ MODAL: Nova/Editar Previsão ════ -->
 <div class="modal-overlay" id="modal-previsao">
@@ -3100,6 +3200,170 @@ function stopRealtimeListeners() {
   if (_unsubProgs)    { _unsubProgs();    _unsubProgs    = null; }
   if (_unsubPrevisao) { _unsubPrevisao(); _unsubPrevisao = null; }
   _realtimeActive = false;
+}
+
+
+// ══════════════════════════════════════════
+// NOVA PROGRAMAÇÃO EM LOTE
+// ══════════════════════════════════════════
+let _npPedidoCount = 0;
+
+// Options HTML (extracted from existing modal)
+const _NP_OPTS_PRODUTO = `<option value="">Selecione o produto...</option>
+            <option value="412 - ALCOOL HIDRATADO">412 - ALCOOL HIDRATADO</option>
+            <option value="414 - ALCOOL ANIDRO">414 - ALCOOL ANIDRO</option>`;
+const _NP_OPTS_USINA   = `<option value="">Selecione a usina...</option>
+            <option value="INPASA BRASIL / BALSAS - MA">INPASA BRASIL / BALSAS - MA</option>
+            <option value="INPASA BRASIL / DOURADOS - MS">INPASA BRASIL / DOURADOS - MS</option>
+            <option value="INPASA BRASIL / LUIS EDUARDO MAGALHAES - BA">INPASA BRASIL / LUIS EDUARDO MAGALHAES - BA</option>
+            <option value="INPASA BRASIL / NOVA MUTUM - MT">INPASA BRASIL / NOVA MUTUM - MT</option>
+            <option value="INPASA BRASIL / RIO VERDE - GO">INPASA BRASIL / RIO VERDE - GO</option>
+            <option value="INPASA BRASIL / RONDONOPOLIS - MT">INPASA BRASIL / RONDONOPOLIS - MT</option>
+            <option value="INPASA BRASIL / SIDROLANDIA - MS">INPASA BRASIL / SIDROLANDIA - MS</option>
+            <option value="INPASA BRASIL / SINOP - MT">INPASA BRASIL / SINOP - MT</option>`;
+const _NP_OPTS_CLIENTE = `<option value="">Selecione...</option>
+            <option value="ALE COMBUSTIVEIS - 23314594001697">ALE COMBUSTIVEIS - 23314594001697</option>
+            <option value="CANEX BIOENERGIA - 20058453000186">CANEX BIOENERGIA - 20058453000186</option>
+            <option value="DUVALE - 58823121000113">DUVALE - 58823121000113</option>
+            <option value="EVOLUA ETANOL - 45335934000112">EVOLUA ETANOL - 45335934000112</option>
+            <option value="IPIRANGA PAULINIA - 33337122005358">IPIRANGA PAULINIA - 33337122005358</option>
+            <option value="LOGUM DUQUE DE CAXIAS - 09584935000722">LOGUM DUQUE DE CAXIAS - 09584935000722</option>
+            <option value="LOGUM GUARULHOS - 09584935001370">LOGUM GUARULHOS - 09584935001370</option>
+            <option value="LOGUM LOGISTICA - 09584935000480">LOGUM LOGISTICA - 09584935000480</option>
+            <option value="NÃO UTILIZAR LOGUM PAULINIA - 09584935001451">NÃO UTILIZAR LOGUM PAULINIA - 09584935001451</option>
+            <option value="OPLA LOGISTICA - 28978543000105">OPLA LOGISTICA - 28978543000105</option>
+            <option value="RAÍZEN CAARAPO - 09538989000409">RAÍZEN CAARAPO - 09538989000409</option>
+            <option value="RAÍZEN PARAGUACU - 52189420000161">RAÍZEN PARAGUACU - 52189420000161</option>
+            <option value="RAÍZEN PAULINIA - 33453598016631">RAÍZEN PAULINIA - 33453598016631</option>
+            <option value="SAARA - 97471676001410">SAARA - 97471676001410</option>
+            <option value="TERCOM - 09361622000110">TERCOM - 09361622000110</option>
+            <option value="VIBRA ENERGIA - 34274233006569">VIBRA ENERGIA - 34274233006569</option>
+            <option value="ALL DISTRIBUIDORA DE COMBUSTIVEIS EIRELI - 30474838000269">ALL DISTRIBUIDORA DE COMBUSTIVEIS EIRELI - 30474838000269</option>
+            <option value="ALCALE COMERCIALIZADORA DE ETANOL E ACUCAR LTDA - 48189644000104">ALCALE COMERCIALIZADORA DE ETANOL E ACUCAR LTDA - 48189644000104</option>
+            <option value="INTEGRAÇÃO COMBUSTIVEIS LTDA - 44248274000412">INTEGRAÇÃO COMBUSTIVEIS LTDA - 44248274000412</option>
+            <option value="RAIZEN PIRACICABA - 08070508012184">RAIZEN PIRACICABA - 08070508012184</option>`;
+const _NP_OPTS_LOCAL   = `<option value="">Selecione...</option>
+            <option value="IPIRANGA PAULINIA - 33337122005358">IPIRANGA PAULINIA - 33337122005358</option>
+            <option value="LOGUM LOGISTICA - 09584935000480">LOGUM LOGISTICA - 09584935000480</option>
+            <option value="OPLA LOGISTICA - 28978543000105">OPLA LOGISTICA - 28978543000105</option>
+            <option value="RAÍZEN PAULINIA - 33453598016631">RAÍZEN PAULINIA - 33453598016631</option>
+            <option value="TERCOM - 09361622000110">TERCOM - 09361622000110</option>`;
+
+function openNovaProg() {
+  _npPedidoCount = 0;
+  // Reset header fields
+  document.getElementById('np-data').value = '';
+  // Populate terminal select
+  const nt = document.getElementById('np-terminal');
+  nt.innerHTML = '<option value="">Nenhum (visível a todos)</option>' +
+    DB.customProfiles.filter(p=>p.baseRole==='terminal')
+      .map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+  // Clear pedidos and add first one
+  document.getElementById('np-pedidos-wrap').innerHTML = '';
+  npAddPedido();
+  openModal('modal-nova-prog');
+}
+
+function npAddPedido() {
+  _npPedidoCount++;
+  const idx = _npPedidoCount;
+  const wrap = document.getElementById('np-pedidos-wrap');
+  const div = document.createElement('div');
+  div.className = 'np-pedido-card';
+  div.id = `np-pedido-${idx}`;
+  div.innerHTML = `
+    <div class="np-pedido-num">Pedido ${idx}</div>
+    ${idx > 1 ? `<button class="np-remove-pedido" onclick="npRemovePedido(${idx})" title="Remover este pedido">🗑</button>` : ''}
+    <div class="form-grid">
+      <div class="form-field"><label>Nº Pedido</label><input type="text" id="np-pedido-${idx}" placeholder="Ex: 00123"></div>
+      <div class="form-field">
+        <label>Produto</label>
+        <select id="np-produto-${idx}">${_NP_OPTS_PRODUTO}</select>
+      </div>
+      <div class="form-field">
+        <label>Usina / Filial</label>
+        <select id="np-usina-${idx}">${_NP_OPTS_USINA}</select>
+      </div>
+      <div class="form-field">
+        <label>Encoste</label>
+        <select id="np-encoste-${idx}">
+          <option value="">Não informado</option>
+          <option value="1º Encoste">1º Encoste</option>
+          <option value="2º Encoste">2º Encoste</option>
+          <option value="3º Encoste">3º Encoste</option>
+        </select>
+      </div>
+      <div class="form-field full">
+        <label>Cliente</label>
+        <select id="np-cliente-${idx}">${_NP_OPTS_CLIENTE}</select>
+      </div>
+      <div class="form-field full">
+        <label>Local de entrega</label>
+        <select id="np-local-${idx}">${_NP_OPTS_LOCAL}</select>
+      </div>
+      <div class="form-field">
+        <label>Qtd Vagões</label>
+        <input type="number" id="np-qtd-${idx}" min="1" max="99" placeholder="Ex: 5">
+      </div>
+    </div>`;
+  wrap.appendChild(div);
+  // Scroll to new pedido
+  div.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function npRemovePedido(idx) {
+  const el = document.getElementById(`np-pedido-${idx}`);
+  if (el) el.remove();
+  // Renumber remaining cards
+  const cards = document.querySelectorAll('.np-pedido-card');
+  cards.forEach((card, i) => {
+    card.querySelector('.np-pedido-num').textContent = `Pedido ${i+1}`;
+  });
+}
+
+async function saveNovaProg() {
+  const data     = document.getElementById('np-data').value;
+  const terminal = document.getElementById('np-terminal').value;
+
+  if (!data) { toast('Informe a data da programação.', true); return; }
+
+  // Collect all pedidos
+  const cards = document.querySelectorAll('.np-pedido-card');
+  const pedidos = [];
+  let hasError = false;
+
+  cards.forEach((card, i) => {
+    const idx    = card.id.replace('np-pedido-','');
+    const pedido = document.getElementById(`np-pedido-${idx}`)?.value.trim();
+    const produto = document.getElementById(`np-produto-${idx}`)?.value.trim();
+    const usina  = document.getElementById(`np-usina-${idx}`)?.value.trim();
+    const encoste = document.getElementById(`np-encoste-${idx}`)?.value.trim();
+    const cliente = document.getElementById(`np-cliente-${idx}`)?.value.trim();
+    const local  = document.getElementById(`np-local-${idx}`)?.value.trim();
+    const qtd    = parseInt(document.getElementById(`np-qtd-${idx}`)?.value);
+
+    if (!pedido || !produto || !usina || !cliente || !local || !qtd) {
+      toast(`Pedido ${i+1}: preencha todos os campos obrigatórios.`, true);
+      hasError = true;
+      return;
+    }
+    pedidos.push({ pedido, produto, usina, encoste, cliente, local, qtd });
+  });
+
+  if (hasError || !pedidos.length) return;
+
+  showLoading(`Salvando ${pedidos.length} pedido(s)...`);
+  try {
+    let saved = 0;
+    for (const p of pedidos) {
+      await ProgAPI.create({ data, terminal, ...p });
+      saved++;
+    }
+    closeModal('modal-nova-prog');
+    toast(`✅ ${saved} pedido(s) criado(s) com sucesso!`);
+  } catch(e) {
+    toast('Erro ao salvar: ' + e.message, true);
+  } finally { hideLoading(); }
 }
 
 // ══════════════════════════════════════════
