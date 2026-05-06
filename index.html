@@ -2339,7 +2339,7 @@ function renderTable() {
         const canDelRetorno = can('canManageUsers') && hasRet;
         const canDelInpasa  = can('canManageUsers') && hasInp;
         const vagaoDigits = (v.vagao||'').replace(/\D/g,'');
-        const vagaoBad = v.vagao!=='' && vagaoDigits.length!==7;
+        const vagaoBad = v.vagao !== '' && !/^[A-Z]{3}\d{7}$/i.test((v.vagao||'').replace(/[\s\-]/g,''));
 
         const retHtml = hasRet
           ? `<div class="pdf-file-row">
@@ -2535,42 +2535,86 @@ async function extractPdfText(file) {
 }
 
 function extractVagaoNumber(text) {
-  // Padrões reais: "VT TCT 034971-2" → 0349712 (7 dígitos, sem hífen)
-  // "PLACA: TCT-0680648" → 0680648
-  const patterns = [
-    /(?:PLACA|VAG[AÃ]O|VT)[:\s\-]*[A-Z]{0,6}[\s\-]?(\d{7})(?:[\-\/]\d)?/gi,
-    /(?:PLACA|VAG[AÃ]O|VT)[:\s\-]*(\d{7})/gi,
-    /TCT[\s\-]?(\d{7})/gi,
-  ];
-  for (const re of patterns) {
-    re.lastIndex = 0;
-    const m = re.exec(text);
-    if (m) return m[1];
+  // Padrão real: sempre 3 LETRAS + 7 DÍGITOS (10 chars no total)
+  // Variações encontradas:
+  //   Teciap:    "PLACA: TCS-0994928"  → TCS + hífen + 7 dígitos
+  //              "PLACA: TCT-0532371"  → TCT + hífen + 7 dígitos
+  //   Ultracargo:"VT TCS 0994880"      → TCS + espaço + 7 dígitos
+  //              "VT TCT 053245-2"     → TCT + espaço + 6 dígitos + hífen + 1 dígito
+  // Normalização: remove espaços e hifens → sempre "3 letras + 7 dígitos"
+
+  function normalizeVagao(letters, digits) {
+    // Remove todos os caracteres não-dígito dos dígitos (hifens internos)
+    const d = digits.replace(/\D/g, '');
+    if (d.length !== 7) return null;
+    return letters.toUpperCase() + d;
   }
+
+  // Padrão A: após PLACA: ou VT — 3 letras + separador + dígitos (com possível hífen interno)
+  const reA = /(?:PLACA|VT)[:\s]+([A-Z]{3})[\s\-](\d{6,7}(?:[\-]\d)?)/gi;
+  let m;
+  reA.lastIndex = 0;
+  while ((m = reA.exec(text)) !== null) {
+    const result = normalizeVagao(m[1], m[2]);
+    if (result) return result;
+  }
+
+  // Padrão B: 3 letras maiúsculas + hífen + 7 dígitos (formato Teciap direto)
+  const reB = /\b([A-Z]{3})\-(\d{7})\b/g;
+  reB.lastIndex = 0;
+  while ((m = reB.exec(text)) !== null) {
+    const result = normalizeVagao(m[1], m[2]);
+    if (result) return result;
+  }
+
+  // Padrão C: 3 letras + espaço + dígitos com possível hífen (formato Ultracargo)
+  const reC = /\b([A-Z]{3})\s(\d{5,7}(?:[\-]\d)?)\b/g;
+  reC.lastIndex = 0;
+  while ((m = reC.exec(text)) !== null) {
+    const result = normalizeVagao(m[1], m[2]);
+    if (result) return result;
+  }
+
   return null;
 }
 
 function extractNfNumber(text) {
-  // Remove pontos de milhar e zeros à esquerda do número
-  function cleanNf(val) { return val.replace(/\./g,'').replace(/^0+/,'') || val; }
-
-  const patterns = [
-    // "Nº 000049024 SÉRIE" — padrão DANFE com série
-    /N[º°o]\.?\s*0*(\d{4,9})\s+S[ÉE]RIE/i,
-    // "Nº\n000049024" — número na linha seguinte
-    /N[º°o]\.?\s*\n\s*0*(\d{4,9})/i,
-    // "Nº 211.381" — com ponto de milhar
-    /N[º°o]\.?\s*(\d{1,3}(?:\.\d{3})+)/,
-    // DANFE bloco genérico
-    /DANFE[\s\S]{0,400}?N[º°o]\.?\s*0*(\d{4,9})/i,
-    // Fallback
-    /N[º°o]\s+0*(\d{4,9})/i,
-  ];
-
-  for (const re of patterns) {
-    const m = text.match(re);
-    if (m) return cleanNf(m[1]);
+  // Normaliza: remove pontos de milhar e zeros à esquerda
+  function cleanNf(val) {
+    return val.replace(/\./g, '').replace(/^0+/, '') || val;
   }
+
+  // Padrão A: "Nº 212.124" ou "Nº 212124" seguido de SÉRIE (mais confiável)
+  // Captura número com ou sem ponto de milhar, com ou sem zeros à esquerda
+  const pA = /N[º°o][\s\n]*(\d{1,3}(?:\.\d{3})+|\d{4,9})\s*\n?\s*SÉ?RIE/i;
+  let m = text.match(pA);
+  if (m) return cleanNf(m[1]);
+
+  // Padrão B: "Nº\n212.124" — número na próxima linha com possível ponto
+  const pB = /N[º°o][\s\n]+(\d{1,3}(?:\.\d{3})+)/;
+  m = text.match(pB);
+  if (m) return cleanNf(m[1]);
+
+  // Padrão C: "Nº 000049221 SÉRIE" — Ultracargo com zeros à esquerda
+  const pC = /N[º°o]\.?\s*(0*\d{4,9})\s+SÉ?RIE/i;
+  m = text.match(pC);
+  if (m) return cleanNf(m[1]);
+
+  // Padrão D: "Nº 212.124" inline sem SÉRIE próximo
+  const pD = /N[º°o]\.?\s*(\d{1,3}(?:\.\d{3})+)/;
+  m = text.match(pD);
+  if (m) return cleanNf(m[1]);
+
+  // Padrão E: DANFE bloco — procura número após DANFE (máx 400 chars)
+  const pE = /DANFE[\s\S]{0,400}?N[º°o][\s\n]*(\d{1,3}(?:\.\d{3})+|\d{4,9})/i;
+  m = text.match(pE);
+  if (m) return cleanNf(m[1]);
+
+  // Fallback: qualquer Nº com número significativo
+  const pF = /N[º°o]\s+(0*\d{4,9})/i;
+  m = text.match(pF);
+  if (m) return cleanNf(m[1]);
+
   return null;
 }
 
@@ -2675,11 +2719,17 @@ async function processPdf(file, type) {
       document.getElementById('pdf-modal-desc').textContent  = `Arquivo: ${file.name}. Confirme os dados antes de aplicar.`;
       document.getElementById('pdf-extracted-fields').innerHTML = `
         <div class="form-field">
-          <label>Número do Vagão (7 dígitos)</label>
-          <input type="text" id="pe-vagao" value="${vagaoNum||''}" placeholder="Ex: 1234567"
-            class="${vagaoNum&&vagaoNum.length!==7?'input-error':''}"
-            oninput="const d=this.value.replace(/\\D/g,'');const ok=this.value===''||d.length===7;this.classList.toggle('input-error',!ok);document.getElementById('pe-vagao-hint').classList.toggle('show',!ok);">
-          <div id="pe-vagao-hint" class="field-hint${vagaoNum&&vagaoNum.length!==7?' show':''}">O número do vagão deve ter exatamente 7 dígitos.</div>
+          <label>Número do Vagão (3 letras + 7 dígitos)</label>
+          <input type="text" id="pe-vagao" value="${vagaoNum||''}" placeholder="Ex: TCS0994928"
+            oninput="
+              const v = this.value.replace(/[\s\-]/g,'').toUpperCase();
+              const ok = v === '' || /^[A-Z]{3}\d{7}$/.test(v);
+              this.classList.toggle('input-error', !ok);
+              document.getElementById('pe-vagao-hint').classList.toggle('show', !ok);
+              if(ok && v) this.value = v;">
+          <div id="pe-vagao-hint" class="field-hint${vagaoNum && !/^[A-Z]{3}\d{7}$/.test(vagaoNum) ? ' show' : ''}">
+            Formato: 3 letras + 7 dígitos (ex: TCS0994928). Hifens e espaços são removidos automaticamente.
+          </div>
         </div>
         <div class="form-field"><label>Número da NF de Retorno (DANFE)</label><input type="text" id="pe-nfret" value="${nfNum||''}" placeholder="Não identificado — insira manualmente"></div>
         <div class="form-field"><label>Volume (m³)</label><input type="text" id="pe-volume" value="${volume||''}" placeholder="Ex: 104.761"></div>
