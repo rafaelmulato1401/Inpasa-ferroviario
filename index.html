@@ -2564,7 +2564,23 @@ document.getElementById('fi-doc-upload').addEventListener('change', async e => {
       if (!prog) return;
       const v = prog.vagoes[ctx.vagaoIdx];
       v.laudoFile = file.name; v.laudoAt = at; v.laudoFileObj = file;
-      if (v.vid) await ProgAPI.updateVagao(ctx.progId, v.vid, { laudoFile: file.name, laudoAt: at });
+      if (v.vid) {
+        // Save filename to vagão doc
+        await ProgAPI.updateVagao(ctx.progId, v.vid, { laudoFile: file.name, laudoAt: at });
+        // Save PDF content as base64 in pdfData subcollection (same as NF PDFs)
+        try {
+          const reader = new FileReader();
+          const b64 = await new Promise((res, rej) => {
+            reader.onload  = () => res(reader.result.split(',')[1]);
+            reader.onerror = () => rej(new Error('Erro ao ler laudo'));
+            reader.readAsDataURL(file);
+          });
+          await db.collection('programacoes').doc(ctx.progId)
+            .collection('vagoes').doc(v.vid)
+            .collection('pdfData').doc('laudo')
+            .set({ data: b64, fileName: file.name, sizeBytes: file.size, uploadedAt: at });
+        } catch(e) { console.warn('Laudo pdfData save:', e); }
+      }
       toast('Laudo anexado: ' + file.name);
     } else {
       // Ficha de Segurança: per programação
@@ -3777,6 +3793,21 @@ async function applyNfLaudo() {
       v.laudoFileObj = _nlCtx.laudoFile;
       updates.laudoFile = _nlCtx.laudoFile.name;
       updates.laudoAt   = at;
+      // Save PDF content to Firestore
+      if (v.vid) {
+        try {
+          const reader = new FileReader();
+          const b64 = await new Promise((res, rej) => {
+            reader.onload  = () => res(reader.result.split(',')[1]);
+            reader.onerror = () => rej(new Error('Erro ao ler laudo'));
+            reader.readAsDataURL(_nlCtx.laudoFile);
+          });
+          await db.collection('programacoes').doc(_nlCtx.progId)
+            .collection('vagoes').doc(v.vid)
+            .collection('pdfData').doc('laudo')
+            .set({ data: b64, fileName: _nlCtx.laudoFile.name, sizeBytes: _nlCtx.laudoFile.size, uploadedAt: at });
+        } catch(e) { console.warn('Laudo pdfData save (batch):', e); }
+      }
     }
 
     // Apply lacre if not already set
@@ -4163,8 +4194,14 @@ async function removeVagaoDoc(progId, vagaoIdx, type) {
   if (!v) return;
   showLoading('Removendo documento...');
   try {
-    v.laudoFile = null; v.laudoAt = null;
-    if (v.vid) await ProgAPI.updateVagao(progId, v.vid, { laudoFile: null, laudoAt: null });
+    v.laudoFile = null; v.laudoAt = null; v.laudoFileObj = null;
+    if (v.vid) {
+      await ProgAPI.updateVagao(progId, v.vid, { laudoFile: null, laudoAt: null });
+      // Also delete from pdfData subcollection
+      try { await db.collection('programacoes').doc(progId)
+        .collection('vagoes').doc(v.vid)
+        .collection('pdfData').doc('laudo').delete(); } catch(e){}
+    }
     renderTable(); toast('Laudo removido.');
   } catch(e) { toast('Erro: ' + e.message, true); }
   finally { hideLoading(); }
@@ -4233,8 +4270,25 @@ async function exportZipProg(progId) {
           if (blob) inpFolder.file(`NF_Inpasa_${vagaoLabel}.pdf`, blob);
         } catch(e) { console.warn('ZIP inpasa:', e); }
       }
-      if (v.laudoFile && v.laudoFileObj) {
-        laudoFolder.file(`Laudo_${vagaoLabel}.pdf`, v.laudoFileObj);
+      if (v.laudoFile) {
+        try {
+          let blob = v.laudoFileObj || null;
+          if (!blob && v.vid) {
+            // Fetch from Firestore pdfData subcollection
+            const snap = await db.collection('programacoes').doc(p.id)
+              .collection('vagoes').doc(v.vid)
+              .collection('pdfData').doc('laudo').get();
+            if (snap.exists) {
+              const b64  = snap.data().data;
+              const name = snap.data().fileName || v.laudoFile;
+              const bin  = atob(b64);
+              const arr  = new Uint8Array(bin.length);
+              for (let j = 0; j < bin.length; j++) arr[j] = bin.charCodeAt(j);
+              blob = new Blob([arr], { type: 'application/pdf' });
+            }
+          }
+          if (blob) laudoFolder.file(`Laudo_${vagaoLabel}.pdf`, blob);
+        } catch(e) { console.warn('ZIP laudo:', e); }
       }
     }
 
