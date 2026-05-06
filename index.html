@@ -3328,22 +3328,45 @@ async function saveNovaProg() {
 
   if (!data) { toast('Informe a data da programação.', true); return; }
 
-  // Collect all pedidos using data-idx attribute
   const cards = Array.from(document.querySelectorAll('.np-pedido-card'));
+  console.log('🔍 Cards encontrados:', cards.length);
+  
   const pedidos = [];
 
   for (let i = 0; i < cards.length; i++) {
     const card    = cards[i];
     const idx     = card.dataset.idx;
-    const pedido  = (document.getElementById(`np-pedido-${idx}`)?.value  || '').trim();
-    const produto = (document.getElementById(`np-produto-${idx}`)?.value || '').trim();
-    const usina   = (document.getElementById(`np-usina-${idx}`)?.value   || '').trim();
-    const encoste = (document.getElementById(`np-encoste-${idx}`)?.value || '').trim();
-    const cliente = (document.getElementById(`np-cliente-${idx}`)?.value || '').trim();
-    const local   = (document.getElementById(`np-local-${idx}`)?.value   || '').trim();
-    const qtd     = parseInt(document.getElementById(`np-qtd-${idx}`)?.value || '0');
+    
+    const pedidoEl  = document.getElementById(`np-pedido-${idx}`);
+    const produtoEl = document.getElementById(`np-produto-${idx}`);
+    const usinaEl   = document.getElementById(`np-usina-${idx}`);
+    const encosteEl = document.getElementById(`np-encoste-${idx}`);
+    const clienteEl = document.getElementById(`np-cliente-${idx}`);
+    const localEl   = document.getElementById(`np-local-${idx}`);
+    const qtdEl     = document.getElementById(`np-qtd-${idx}`);
+
+    console.log(`🔍 Pedido ${i+1} (idx=${idx}):`, {
+      pedido:  pedidoEl?.value,
+      produto: produtoEl?.value,
+      usina:   usinaEl?.value,
+      encoste: encosteEl?.value,
+      cliente: clienteEl?.value,
+      local:   localEl?.value,
+      qtd:     qtdEl?.value,
+      data_idx: idx,
+      card_id:  card.id,
+    });
+
+    const pedido  = (pedidoEl?.value  || '').trim();
+    const produto = (produtoEl?.value || '').trim();
+    const usina   = (usinaEl?.value   || '').trim();
+    const encoste = (encosteEl?.value || '').trim();
+    const cliente = (clienteEl?.value || '').trim();
+    const local   = (localEl?.value   || '').trim();
+    const qtd     = parseInt(qtdEl?.value || '0');
 
     if (!pedido || !produto || !usina || !cliente || !local || !qtd || qtd < 1) {
+      console.warn(`❌ Pedido ${i+1} inválido:`, { pedido, produto, usina, cliente, local, qtd });
       toast(`Pedido ${i+1}: preencha todos os campos obrigatórios.`, true);
       return;
     }
