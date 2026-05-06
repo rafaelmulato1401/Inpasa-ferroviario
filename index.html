@@ -3589,8 +3589,7 @@ function extractFromNfInpasa(text) {
   const nf = (() => {
     // Padrão A: Nº 000182339 SÉRIE
     const m = t.match(/N[º°o]\.?\s*(0*\d{5,9})\s+S[ÉE]RIE/i) ||
-              t.match(/N[º°o]\.?\s*
-?\s*(0*\d{5,9})/i);
+              t.match(/N[º°o]\.?\s*[\n]?\s*(0*\d{5,9})/i);
     return m ? m[1].replace(/\./g,'').replace(/^0+/,'') : null;
   })();
   // Vagão na NF Inpasa: aparece como "PLACA TCT0533327" ou no campo de transportador
