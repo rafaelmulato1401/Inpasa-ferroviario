@@ -1004,6 +1004,68 @@ tbody tr { border-bottom:1px solid #edf0f8; }
   </div>
 </div>
 
+
+<!-- ════ MODAL: Input NF + Laudo Inpasa ════ -->
+<div class="modal-overlay" id="modal-nf-laudo">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-head">
+      <div class="modal-head-left"><h3>📋 Input NF + Laudo Inpasa</h3></div>
+      <button class="modal-close" onclick="closeModal('modal-nf-laudo')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f0f4ff;border:1px solid #c8d4f0;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--blue);">
+        <strong>Como funciona:</strong> selecione a NF Inpasa e/ou o Laudo. O sistema lê os arquivos,
+        identifica o vagão pelo número da placa e vincula automaticamente na linha correta.
+        Se não identificar, você poderá vincular manualmente.
+      </div>
+
+      <div class="form-grid">
+        <div class="form-field full">
+          <label>NF Inpasa (PDF)</label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn-secondary" onclick="document.getElementById('fi-nf-inpasa-batch').click()" style="flex:1;">
+              📄 Selecionar NF Inpasa
+            </button>
+            <span id="nl-nf-name" style="font-size:11px;color:var(--text-muted);flex:2;">Nenhum arquivo</span>
+          </div>
+        </div>
+        <div class="form-field full">
+          <label>Laudo / Certificado (PDF)</label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn-secondary" onclick="document.getElementById('fi-laudo-batch').click()" style="flex:1;">
+              📋 Selecionar Laudo
+            </button>
+            <span id="nl-laudo-name" style="font-size:11px;color:var(--text-muted);flex:2;">Nenhum arquivo</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview dos dados extraídos -->
+      <div id="nl-preview" style="display:none;margin-top:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Dados extraídos</div>
+        <div id="nl-preview-body" style="font-size:12px;line-height:1.8;"></div>
+      </div>
+
+      <div id="nl-warn" style="display:none;margin-top:10px;padding:8px 12px;border-radius:6px;font-size:12px;"></div>
+
+      <!-- Fallback: vínculo manual se não identificar o vagão -->
+      <div id="nl-manual-wrap" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+        <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:8px;">⚠️ Vagão não identificado automaticamente — selecione manualmente:</div>
+        <div class="form-field full">
+          <label>Selecione o vagão desta programação</label>
+          <select id="nl-vagao-select">
+            <option value="">Selecione...</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel-m" onclick="closeModal('modal-nf-laudo')">Cancelar</button>
+      <button class="btn-ok" id="nl-apply-btn" onclick="applyNfLaudo()" disabled>Vincular ao vagão</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════ MODAL: Nova/Editar Previsão ════ -->
 <div class="modal-overlay" id="modal-previsao">
   <div class="modal" style="max-width:480px;">
@@ -1238,6 +1300,8 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 
 <input type="file" id="fi-nf-retorno" accept=".pdf">
 <input type="file" id="fi-doc-upload" accept=".pdf,.jpg,.jpeg,.png">
+<input type="file" id="fi-nf-inpasa-batch" accept=".pdf">
+<input type="file" id="fi-laudo-batch" accept=".pdf,.jpg,.jpeg,.png">
 <input type="file" id="fi-nf-inpasa" accept=".pdf">
 
 
@@ -2108,13 +2172,15 @@ function handleInlineInput(progId, idx, field, value) {
   const prog = ProgAPI.list().find(p=>p.id===progId);
   if (!prog) return;
   if (field==='vagao') {
-    const digits = value.replace(/\D/g,'');
+    // Normalize: uppercase, remove spaces/hyphens
+    const norm = value.replace(/[\s\-]/g,'').toUpperCase();
     const inputEl = document.getElementById(`vi-${progId}-${idx}`);
     const hintEl  = document.getElementById(`vh-${progId}-${idx}`);
-    const bad = value!=='' && digits.length!==7;
+    // Valid: empty OR exactly 3 letters + 7 digits
+    const bad = norm !== '' && !/^[A-Z]{3}\d{7}$/.test(norm);
     if (inputEl) inputEl.classList.toggle('input-error', bad);
     if (hintEl)  hintEl.classList.toggle('show', bad);
-    prog.vagoes[idx][field] = value;
+    prog.vagoes[idx][field] = norm || value; // save normalized
   } else {
     prog.vagoes[idx][field] = value;
   }
@@ -2316,6 +2382,8 @@ function renderTable() {
               ${can('canDownload') ? `
               <button class="icon-btn" title="Exportar Excel" onclick="exportExcelProg('${p.id}')">📊</button>
               <button class="icon-btn" title="Baixar PDFs" onclick="exportZipProg('${p.id}')">📦</button>` : ''}
+              ${can('canUploadInpasa') ? `
+              <button class="icon-btn" style="font-size:9px;padding:3px 5px;" title="Input NF + Laudo Inpasa — vincula automaticamente ao vagão correspondente" onclick="openNfLaudoModal('${p.id}')">📋</button>` : ''}
             </div>
           </td>
           <td>${getFichaButtons(p)}</td>
@@ -2361,9 +2429,9 @@ function renderTable() {
           <td class="sub-lbl" colspan="6" style="padding-left:48px;">↳ Vagão ${i+1}${isCompleted ? ' <span style="font-size:9px;color:var(--green);font-weight:700;">🔒 Concluído</span>' : ''}</td>
           <td><div>
             <input id="vi-${p.id}-${i}" class="inline-input${vagaoBad?' input-error':''}"
-              type="text" placeholder="7 dígitos" value="${esc(v.vagao)}" ${!canV?'disabled':''}
+              type="text" placeholder="Ex: TCS0994928" value="${esc(v.vagao)}" ${!canV?'disabled':''}
               oninput="handleInlineInput('${p.id}',${i},'vagao',this.value)">
-            <div id="vh-${p.id}-${i}" class="vagao-hint${vagaoBad?' show':''}">Obrigatório 7 dígitos</div>
+            <div id="vh-${p.id}-${i}" class="vagao-hint${vagaoBad?' show':''}">Formato: 3 letras + 7 dígitos (ex: TCS0994928)</div>
           </div></td>
           <td><div class="pdf-cell">
             <input class="inline-input" type="text" placeholder="Nº NF" value="${esc(v.nfRetorno)}" ${!canR?'disabled':''}
@@ -2472,6 +2540,9 @@ function triggerPdfUpload(progId, vagaoIdx, type) {
   input.value=''; input.click();
 }
 document.getElementById('fi-nf-retorno').addEventListener('change', e => { if (e.target.files[0]) processPdf(e.target.files[0],'retorno'); });
+document.getElementById('fi-nf-inpasa-batch').addEventListener('change', () => nlProcessFile('nf'));
+document.getElementById('fi-laudo-batch').addEventListener('change', () => nlProcessFile('laudo'));
+
 document.getElementById('fi-doc-upload').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file || !_docCtx) return;
@@ -2584,13 +2655,18 @@ function extractNfNumber(text) {
     return val.replace(/\./g, '').replace(/^0+/, '') || val;
   }
 
-  // Padrão A: "Nº 212.124" ou "Nº 212124" seguido de SÉRIE (mais confiável)
-  // Captura número com ou sem ponto de milhar, com ou sem zeros à esquerda
-  const pA = /N[º°o][\s\n]*(\d{1,3}(?:\.\d{3})+|\d{4,9})\s*\n?\s*SÉ?RIE/i;
-  let m = text.match(pA);
+  // Padrão T (Teciap): "Nº\nSÉRIE\n212.124\n212.124\nFATURA"
+  // Número vem DEPOIS de SÉRIE numa nova linha
+  const pT = /SÉ?RIE[\s\n]+(\d{1,3}(?:\.\d{3})+)/i;
+  let m = text.match(pT);
   if (m) return cleanNf(m[1]);
 
-  // Padrão B: "Nº\n212.124" — número na próxima linha com possível ponto
+  // Padrão A: "Nº 212.124 SÉRIE" — número antes de SÉRIE (mesma linha)
+  const pA = /N[º°o][\s\n]*(\d{1,3}(?:\.\d{3})+|\d{4,9})\s*\n?\s*SÉ?RIE/i;
+  m = text.match(pA);
+  if (m) return cleanNf(m[1]);
+
+  // Padrão B: "Nº\n212.124" — número na próxima linha com ponto
   const pB = /N[º°o][\s\n]+(\d{1,3}(?:\.\d{3})+)/;
   m = text.match(pB);
   if (m) return cleanNf(m[1]);
@@ -2803,19 +2879,20 @@ async function applyPdfData() {
   if (!prog) return;
   const v = prog.vagoes[ctx.vagaoIdx];
   if (type==='retorno') {
-    const vagaoNum = document.getElementById('pe-vagao')?.value.trim();
+    const vagaoNum = document.getElementById('pe-vagao')?.value.trim().replace(/[\s\-]/g,'').toUpperCase();
     const nfRet    = document.getElementById('pe-nfret')?.value.trim();
     const lacre    = document.getElementById('pe-lacre')?.value.trim();
-    const digits   = (vagaoNum||'').replace(/\D/g,'');
-    if (vagaoNum && digits.length!==7) {
+    // Validate: must be 3 letters + 7 digits OR empty
+    const vagaoOk  = !vagaoNum || /^[A-Z]{3}\d{7}$/.test(vagaoNum);
+    if (vagaoNum && !vagaoOk) {
       const el = document.getElementById('pe-vagao');
       if (el) { el.classList.add('input-error'); el.focus(); }
       const warn = document.getElementById('pdf-warn');
       warn.style.display='block'; warn.style.background='#fee2e2'; warn.style.color='#b91c1c';
-      warn.textContent='O número do vagão deve conter exatamente 7 dígitos. Corrija antes de confirmar.';
+      warn.textContent='Formato inválido. O vagão deve ter 3 letras + 7 dígitos (ex: TCS0994928).';
       return;
     }
-    if (vagaoNum) v.vagao     = digits;
+    if (vagaoNum) v.vagao = vagaoNum; // save full: TCS0994928
     if (nfRet)    v.nfRetorno = nfRet;
     if (lacre)    v.lacre     = lacre;
     const volVal = document.getElementById('pe-volume')?.value.trim();
@@ -3458,6 +3535,270 @@ async function saveNovaProg() {
   } finally { hideLoading(); }
 }
 
+
+// ══════════════════════════════════════════
+// INPUT NF + LAUDO INPASA (vinculação automática por vagão)
+// ══════════════════════════════════════════
+let _nlCtx = { progId: null, nfFile: null, laudoFile: null, nfData: null, laudoData: null };
+
+function normalizeSpacedText(text) {
+  // Colapsa espaços entre dígitos: "0 0 0 1 8 2 3 3 9" → "000182339"
+  let t = text.replace(/(\d)\s+(?=\d)/g, '$1');
+  // Colapsa "N º" → "Nº" e "S É R I E" → "SÉRIE"
+  t = t.replace(/N\s+[º°o]/gi, 'Nº');
+  t = t.replace(/S\s*É\s*R\s*I\s*E/gi, 'SÉRIE');
+  return t;
+}
+
+function extractFromCT(text) {
+  // CT/Laudo da Inpasa: extrai vagão, lacre, NF e volume
+  const t = normalizeSpacedText(text);
+  const vagao = (() => {
+    const m = t.match(/Placa[s]?[:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/i);
+    if (!m) return null;
+    const d = m[2].replace(/\D/g,'');
+    return d.length === 7 ? m[1].toUpperCase() + d : null;
+  })();
+  const lacre = (t.match(/Lacre[s]?[:\s]+(\d{4,10})/i)||[])[1] || null;
+  const nf    = (() => {
+    const m = t.match(/Nota\(s\)\s*Fiscal\(is\)[:\s]*(\d+)/i) ||
+              t.match(/N[º°o]\.?\s*(0*\d{5,9})\s+S[ÉE]RIE/i);
+    return m ? m[1].replace(/^0+/,'') : null;
+  })();
+  const volume = (() => {
+    // "Vol. 20°C (L): 99.666,000" ou "Vol. Faturado (L): 99.666,000"
+    const m = t.match(/Vol\.?\s*(?:20\s*°C|Faturado)\s*\(L\)[:\s]*([\d.,]+)/i);
+    if (!m) return null;
+    let v = m[1].replace(/\./g,'').replace(',','.');
+    return parseFloat(v) > 0 ? parseFloat(v).toFixed(3) : null;
+  })();
+  return { vagao, lacre, nf, volume };
+}
+
+function extractFromNfInpasa(text) {
+  // NF Inpasa: pode ter espaços entre caracteres
+  const t = normalizeSpacedText(text);
+  const nf = (() => {
+    // Padrão A: Nº 000182339 SÉRIE
+    const m = t.match(/N[º°o]\.?\s*(0*\d{5,9})\s+S[ÉE]RIE/i) ||
+              t.match(/N[º°o]\.?\s*
+?\s*(0*\d{5,9})/i);
+    return m ? m[1].replace(/\./g,'').replace(/^0+/,'') : null;
+  })();
+  // Vagão na NF Inpasa: aparece como "PLACA TCT0533327" ou no campo de transportador
+  const vagao = (() => {
+    const m = t.match(/PLAC[AO][:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/i);
+    if (!m) return null;
+    const d = m[2].replace(/\D/g,'');
+    return d.length === 7 ? m[1].toUpperCase() + d : null;
+  })();
+  const lacre = (t.match(/LACRE\(?S?\)?[:\s]+([\d\s]+\d)/i)||[])[1]?.replace(/\s/g,'') || null;
+  return { nf, vagao, lacre };
+}
+
+function findVagaoByPlate(prog, vagaoStr) {
+  if (!vagaoStr) return -1;
+  const norm = vagaoStr.replace(/[\s\-]/g,'').toUpperCase();
+  return prog.vagoes.findIndex(v => {
+    const vn = (v.vagao||'').replace(/[\s\-]/g,'').toUpperCase();
+    return vn === norm;
+  });
+}
+
+function openNfLaudoModal(progId) {
+  _nlCtx = { progId, nfFile: null, laudoFile: null, nfData: null, laudoData: null };
+
+  // Reset UI
+  document.getElementById('nl-nf-name').textContent    = 'Nenhum arquivo';
+  document.getElementById('nl-laudo-name').textContent = 'Nenhum arquivo';
+  document.getElementById('nl-preview').style.display  = 'none';
+  document.getElementById('nl-warn').style.display     = 'none';
+  document.getElementById('nl-manual-wrap').style.display = 'none';
+  document.getElementById('nl-apply-btn').disabled     = true;
+  document.getElementById('fi-nf-inpasa-batch').value  = '';
+  document.getElementById('fi-laudo-batch').value      = '';
+
+  // Populate vagão select for manual fallback
+  const prog = ProgAPI.list().find(p => p.id === progId);
+  const sel  = document.getElementById('nl-vagao-select');
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    (prog?.vagoes||[]).map((v,i) =>
+      `<option value="${i}">Vagão ${i+1}${v.vagao ? ' — '+v.vagao : ''}</option>`
+    ).join('');
+
+  openModal('modal-nf-laudo');
+}
+
+async function nlProcessFile(type) {
+  const inputId = type === 'nf' ? 'fi-nf-inpasa-batch' : 'fi-laudo-batch';
+  const nameId  = type === 'nf' ? 'nl-nf-name' : 'nl-laudo-name';
+  const input   = document.getElementById(inputId);
+  const file    = input.files[0];
+  if (!file) return;
+
+  document.getElementById(nameId).textContent = file.name;
+  showLoading('Lendo ' + (type === 'nf' ? 'NF Inpasa' : 'Laudo') + '...');
+
+  try {
+    const text = await extractPdfText(file);
+    if (type === 'nf') {
+      _nlCtx.nfFile = file;
+      _nlCtx.nfData = extractFromNfInpasa(text);
+      _nlCtx.nfData._rawText = text;
+    } else {
+      _nlCtx.laudoFile = file;
+      _nlCtx.laudoData = extractFromCT(text);
+      _nlCtx.laudoData._rawText = text;
+    }
+    nlUpdatePreview();
+  } catch(e) {
+    toast('Erro ao ler arquivo: ' + e.message, true);
+  } finally { hideLoading(); }
+}
+
+function nlUpdatePreview() {
+  const nf    = _nlCtx.nfData;
+  const ct    = _nlCtx.laudoData;
+  const prog  = ProgAPI.list().find(p => p.id === _nlCtx.progId);
+
+  // Merge dados: CT tem prioridade para vagão e lacre
+  const vagaoStr = ct?.vagao  || nf?.vagao  || null;
+  const lacre    = ct?.lacre  || nf?.lacre  || null;
+  const nfNum    = nf?.nf     || ct?.nf     || null;
+  const volume   = ct?.volume || null;
+
+  const vagaoIdx = prog ? findVagaoByPlate(prog, vagaoStr) : -1;
+
+  // Preview
+  const preview = document.getElementById('nl-preview');
+  const body    = document.getElementById('nl-preview-body');
+  const warn    = document.getElementById('nl-warn');
+  const manual  = document.getElementById('nl-manual-wrap');
+  const applyBtn = document.getElementById('nl-apply-btn');
+
+  if (!nf && !ct) { preview.style.display = 'none'; return; }
+
+  let rows = '';
+  rows += `<div>📄 <strong>NF Inpasa:</strong> ${nfNum || '<em style="color:var(--text-muted)">não identificado</em>'}</div>`;
+  rows += `<div>🚃 <strong>Vagão:</strong> ${vagaoStr || '<em style="color:var(--text-muted)">não identificado</em>'}`;
+  if (vagaoStr && vagaoIdx >= 0) rows += ` <span style="color:var(--green);font-weight:700;">→ Vagão ${vagaoIdx+1} ✅</span>`;
+  else if (vagaoStr) rows += ` <span style="color:var(--red);font-weight:600;">→ não encontrado nesta programação</span>`;
+  rows += '</div>';
+  rows += `<div>🔒 <strong>Lacre:</strong> ${lacre || '<em style="color:var(--text-muted)">não identificado</em>'}</div>`;
+  if (volume) rows += `<div>📦 <strong>Volume:</strong> ${volume} m³</div>`;
+
+  body.innerHTML = rows;
+  preview.style.display = 'block';
+
+  // Store merged data for apply
+  _nlCtx._merged = { vagaoStr, vagaoIdx, nfNum, lacre, volume };
+
+  if (vagaoIdx >= 0) {
+    // Auto match found
+    warn.style.display  = 'none';
+    manual.style.display = 'none';
+    applyBtn.disabled   = false;
+  } else if (vagaoStr || nfNum) {
+    // Files read but vagão not matched — show manual select
+    warn.style.display       = 'block';
+    warn.style.background    = '#fef3c7';
+    warn.style.color         = '#92400e';
+    warn.textContent         = vagaoStr
+      ? `⚠️ Vagão "${vagaoStr}" não encontrado nesta programação. Selecione manualmente abaixo.`
+      : '⚠️ Vagão não identificado nos arquivos. Selecione manualmente abaixo.';
+    manual.style.display     = 'block';
+    applyBtn.disabled        = false; // enable but will check manual select
+  } else {
+    warn.style.display   = 'block';
+    warn.style.background = '#fee2e2';
+    warn.style.color      = '#b91c1c';
+    warn.textContent      = '❌ Não foi possível extrair dados. Verifique os arquivos.';
+    applyBtn.disabled     = true;
+  }
+}
+
+async function applyNfLaudo() {
+  const prog    = ProgAPI.list().find(p => p.id === _nlCtx.progId);
+  if (!prog) return;
+
+  let { vagaoIdx, nfNum, lacre, volume } = _nlCtx._merged || {};
+
+  // Check manual selection if auto didn't find
+  if (vagaoIdx < 0 || vagaoIdx === undefined) {
+    const sel = document.getElementById('nl-vagao-select');
+    vagaoIdx = parseInt(sel.value);
+    if (isNaN(vagaoIdx) || vagaoIdx < 0) {
+      toast('Selecione o vagão manualmente.', true); return;
+    }
+  }
+
+  const v = prog.vagoes[vagaoIdx];
+  if (!v) { toast('Vagão não encontrado.', true); return; }
+
+  showLoading('Vinculando ao Vagão ' + (vagaoIdx+1) + '...');
+  try {
+    const at = fmtDateTime();
+    const updates = {};
+
+    // Apply NF Inpasa
+    if (_nlCtx.nfFile && nfNum) {
+      v.nfInpasa     = nfNum;
+      v.nfInpasaFile = _nlCtx.nfFile.name;
+      v.nfInpasaAt   = at;
+      v.nfInpasaFileObj = _nlCtx.nfFile;
+      updates.nfInpasa    = nfNum;
+      updates.nfInpasaFile = _nlCtx.nfFile.name;
+      updates.nfInpasaAt  = at;
+      // Store PDF in Firestore
+      if (v.vid) {
+        const reader = new FileReader();
+        const b64 = await new Promise(res => {
+          reader.onload = () => res(reader.result.split(',')[1]);
+          reader.readAsDataURL(_nlCtx.nfFile);
+        });
+        await db.collection('programacoes').doc(_nlCtx.progId)
+          .collection('vagoes').doc(v.vid)
+          .collection('pdfData').doc('inpasa')
+          .set({ data: b64, fileName: _nlCtx.nfFile.name, sizeBytes: _nlCtx.nfFile.size, uploadedAt: at });
+      }
+    }
+
+    // Apply Laudo
+    if (_nlCtx.laudoFile) {
+      v.laudoFile    = _nlCtx.laudoFile.name;
+      v.laudoAt      = at;
+      v.laudoFileObj = _nlCtx.laudoFile;
+      updates.laudoFile = _nlCtx.laudoFile.name;
+      updates.laudoAt   = at;
+    }
+
+    // Apply lacre if not already set
+    if (lacre && !v.lacre) {
+      v.lacre = lacre;
+      updates.lacre = lacre;
+    }
+
+    // Apply volume if not already set
+    if (volume && !v.volume) {
+      v.volume = volume;
+      updates.volume = volume;
+    }
+
+    // Save to Firestore
+    if (v.vid && Object.keys(updates).length) {
+      await ProgAPI.updateVagao(_nlCtx.progId, v.vid, updates);
+    }
+
+    closeModal('modal-nf-laudo');
+    renderTable();
+    toast(`✅ NF + Laudo vinculados ao Vagão ${vagaoIdx+1}!`);
+  } catch(e) {
+    console.error('applyNfLaudo:', e);
+    toast('Erro ao vincular: ' + e.message, true);
+  } finally { hideLoading(); }
+}
+
+// File input listeners for batch NF+Laudo
 // ══════════════════════════════════════════
 // PREVISÃO DE VAGÕES
 // ══════════════════════════════════════════
