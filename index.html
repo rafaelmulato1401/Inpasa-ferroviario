@@ -3327,42 +3327,66 @@ async function saveNovaProg() {
 
   if (!data) { toast('Informe a data da programação.', true); return; }
 
-  // Collect all pedidos
-  const cards = document.querySelectorAll('.np-pedido-card');
+  // Collect all pedidos — using for loop (not forEach) so return works correctly
+  const cards = Array.from(document.querySelectorAll('.np-pedido-card'));
   const pedidos = [];
-  let hasError = false;
 
-  cards.forEach((card, i) => {
-    const idx    = card.id.replace('np-pedido-','');
-    const pedido = document.getElementById(`np-pedido-${idx}`)?.value.trim();
-    const produto = document.getElementById(`np-produto-${idx}`)?.value.trim();
-    const usina  = document.getElementById(`np-usina-${idx}`)?.value.trim();
-    const encoste = document.getElementById(`np-encoste-${idx}`)?.value.trim();
-    const cliente = document.getElementById(`np-cliente-${idx}`)?.value.trim();
-    const local  = document.getElementById(`np-local-${idx}`)?.value.trim();
-    const qtd    = parseInt(document.getElementById(`np-qtd-${idx}`)?.value);
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i];
+    const idx     = card.id.replace('np-pedido-','');
+    const pedido  = (document.getElementById(`np-pedido-${idx}`)?.value  || '').trim();
+    const produto = (document.getElementById(`np-produto-${idx}`)?.value || '').trim();
+    const usina   = (document.getElementById(`np-usina-${idx}`)?.value   || '').trim();
+    const encoste = (document.getElementById(`np-encoste-${idx}`)?.value || '').trim();
+    const cliente = (document.getElementById(`np-cliente-${idx}`)?.value || '').trim();
+    const local   = (document.getElementById(`np-local-${idx}`)?.value   || '').trim();
+    const qtd     = parseInt(document.getElementById(`np-qtd-${idx}`)?.value || '0');
 
-    if (!pedido || !produto || !usina || !cliente || !local || !qtd) {
+    if (!pedido || !produto || !usina || !cliente || !local || !qtd || qtd < 1) {
       toast(`Pedido ${i+1}: preencha todos os campos obrigatórios.`, true);
-      hasError = true;
-      return;
+      return; // now correctly stops the function
     }
     pedidos.push({ pedido, produto, usina, encoste, cliente, local, qtd });
-  });
+  }
 
-  if (hasError || !pedidos.length) return;
+  if (!pedidos.length) { toast('Adicione pelo menos 1 pedido.', true); return; }
 
   showLoading(`Salvando ${pedidos.length} pedido(s)...`);
   try {
-    let saved = 0;
+    // Save each pedido — skip loadAll to avoid conflicts with real-time listener
     for (const p of pedidos) {
-      await ProgAPI.create({ data, terminal, ...p });
-      saved++;
+      const { qtd, ...rest } = p;
+      const ref = await db.collection('programacoes').add({
+        ...rest,
+        data,
+        terminal,
+        qtd,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        createdBy: currentUser?.uid || '',
+      });
+      // Create vagoes subcollection
+      const batch = db.batch();
+      for (let i = 0; i < qtd; i++) {
+        const vRef = db.collection('programacoes').doc(ref.id).collection('vagoes').doc();
+        batch.set(vRef, {
+          idx: i, vagao:'', nfRetorno:'', lacre:'', nfInpasa:'',
+          volume:'', nfRetornoFile:null, nfInpasaFile:null,
+          enviadoFaturamentoAt: null,
+        });
+      }
+      await batch.commit();
     }
     closeModal('modal-nova-prog');
-    toast(`✅ ${saved} pedido(s) criado(s) com sucesso!`);
+    toast(`✅ ${pedidos.length} pedido(s) criado(s)! A tabela atualizará automaticamente.`);
+    // Manual reload in case real-time listener hasn't fired yet
+    setTimeout(async () => {
+      const tf = (!can('canSeeAll') && currentUser?.terminalName) ? currentUser.terminalName : null;
+      await ProgAPI.loadAll(tf);
+      renderTable();
+    }, 800);
   } catch(e) {
-    toast('Erro ao salvar: ' + e.message, true);
+    console.error('saveNovaProg error:', e);
+    toast('Erro ao salvar: ' + (e.message || e), true);
   } finally { hideLoading(); }
 }
 
