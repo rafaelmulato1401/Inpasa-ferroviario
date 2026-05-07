@@ -235,10 +235,22 @@ input[type=file] { display: none; }
 
 /* Table */
 .table-card { background:var(--white); border-radius:10px; border:1px solid var(--border); overflow:hidden; }
-.table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-table { width:100%; border-collapse:collapse; font-size:11px; table-layout:fixed; }
-thead th { background:var(--blue); color:var(--white); padding:7px 7px; text-align:left; font-size:10px; font-weight:600; white-space:nowrap; border-right:1px solid rgba(255,255,255,.1); overflow:hidden; text-overflow:ellipsis; }
+.table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; min-width:0; }
+table { width:100%; border-collapse:collapse; font-size:11px; table-layout:auto; }
+thead th {
+  background:var(--blue); color:var(--white);
+  padding:8px 8px; text-align:left; font-size:10.5px; font-weight:600;
+  white-space:nowrap; border-right:1px solid rgba(255,255,255,.1);
+  position:relative; user-select:none;
+}
 thead th:last-child { border-right:none; }
+/* Alça de resize arrastável em cada th */
+thead th .resize-handle {
+  position:absolute; right:0; top:0; bottom:0; width:5px;
+  cursor:col-resize; background:transparent; z-index:1;
+}
+thead th .resize-handle:hover,
+thead th .resize-handle.resizing { background:rgba(255,255,255,.35); }
 tbody tr { border-bottom:1px solid #edf0f8; }
 .row-prog { background:var(--blue-pale); }
 .row-prog:hover { background:#eaf0fc; }
@@ -737,20 +749,20 @@ tbody tr { border-bottom:1px solid #edf0f8; }
           <table>
             <thead>
               <tr>
-                <th>Nº Pedido / Vagão</th>
-                <th style="width:80px">Encoste</th>
-                <th class="hide-mobile">Produto</th>
-                <th class="hide-mobile">Usina/Filial</th>
-                <th class="hide-mobile">Cliente</th>
-                <th class="hide-mobile">Local entrega</th>
-                <th style="width:95px">Vagão Nº</th>
-                <th style="width:85px">NF Retorno</th>
-                <th style="width:75px">Volume (L)</th>
-                <th class="hide-mobile" style="width:70px">Lacre</th>
-                <th style="width:80px">NF Inpasa</th>
-                <th style="width:75px">Laudo</th>
-                <th style="width:115px">Status</th>
-                <th style="width:170px">Ações</th>
+                <th>Nº Pedido / V...<span class="resize-handle"></span></th>
+                <th>Encoste<span class="resize-handle"></span></th>
+                <th class="hide-mobile">Produto<span class="resize-handle"></span></th>
+                <th class="hide-mobile">Usina/Filial<span class="resize-handle"></span></th>
+                <th class="hide-mobile">Cliente<span class="resize-handle"></span></th>
+                <th class="hide-mobile">Local entrega<span class="resize-handle"></span></th>
+                <th>Vagão Nº<span class="resize-handle"></span></th>
+                <th>NF Retorno<span class="resize-handle"></span></th>
+                <th>Volume (L)<span class="resize-handle"></span></th>
+                <th class="hide-mobile">Lacre<span class="resize-handle"></span></th>
+                <th>NF Inpasa<span class="resize-handle"></span></th>
+                <th>Laudo<span class="resize-handle"></span></th>
+                <th>Status<span class="resize-handle"></span></th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody id="table-body">
@@ -5110,6 +5122,87 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.warn('SW erro:', err));
   });
 }
+
+// ══════════════════════════════════════════
+// RESIZE DE COLUNAS — arrastar alça para redimensionar
+// Persiste larguras em localStorage
+// ══════════════════════════════════════════
+(function initColResize() {
+  const STORAGE_KEY = 'inpasa_col_widths_v1';
+
+  function saveWidths(ths) {
+    const widths = Array.from(ths).map(th => th.offsetWidth);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(widths)); } catch(e) {}
+  }
+
+  function restoreWidths(ths) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (!saved || saved.length !== ths.length) return;
+      ths.forEach((th, i) => { if (saved[i] > 20) th.style.width = saved[i] + 'px'; });
+    } catch(e) {}
+  }
+
+  function attachResize(table) {
+    const ths = table.querySelectorAll('thead th');
+    restoreWidths(ths);
+
+    ths.forEach((th, idx) => {
+      const handle = th.querySelector('.resize-handle');
+      if (!handle) return;
+
+      let startX, startW;
+
+      handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        startX = e.clientX;
+        startW = th.offsetWidth;
+        handle.classList.add('resizing');
+
+        // Fixa largura atual de TODAS as colunas antes de começar
+        ths.forEach(t => { t.style.width = t.offsetWidth + 'px'; });
+        table.style.tableLayout = 'fixed';
+
+        const onMove = e => {
+          const newW = Math.max(40, startW + (e.clientX - startX));
+          th.style.width = newW + 'px';
+        };
+        const onUp = () => {
+          handle.classList.remove('resizing');
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          saveWidths(ths);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
+  }
+
+  // Observa quando a tabela principal aparece no DOM (renderTable popula o tbody)
+  const observer = new MutationObserver(() => {
+    const table = document.querySelector('#table-body')?.closest('table');
+    if (table && !table._resizeInit) {
+      table._resizeInit = true;
+      attachResize(table);
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Botão para resetar larguras (duplo-clique no canto do header)
+  document.addEventListener('dblclick', e => {
+    const handle = e.target.closest('.resize-handle');
+    if (!handle) return;
+    const table = handle.closest('table');
+    if (!table) return;
+    const ths = table.querySelectorAll('thead th');
+    ths.forEach(th => { th.style.width = ''; });
+    table.style.tableLayout = 'auto';
+    try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  });
+})();
+
+
 
 // ══════════════════════════════════════════════════════════════════
 // ⚓ DESCARGAS — Parse XLSX Logum / Opla / Tercom + Vinculação
