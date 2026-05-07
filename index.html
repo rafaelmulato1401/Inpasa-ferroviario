@@ -1006,61 +1006,72 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 
 <!-- ════ MODAL: Input NF + Laudo Inpasa ════ -->
 <div class="modal-overlay" id="modal-nf-laudo">
-  <div class="modal" style="max-width:520px;">
-    <div class="modal-head">
-      <div class="modal-head-left"><h3>📋 Input NF + Laudo Inpasa</h3></div>
+  <div class="modal" style="max-width:680px;max-height:90vh;overflow-y:auto;">
+    <div class="modal-head" style="position:sticky;top:0;z-index:10;">
+      <div class="modal-head-left">
+        <h3>📋 Input NF + Laudo Inpasa</h3>
+        <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px;">Suba múltiplas NFs e Laudos — o sistema vincula ao vagão correto automaticamente</div>
+      </div>
       <button class="modal-close" onclick="closeModal('modal-nf-laudo')">✕</button>
     </div>
     <div class="modal-body">
-      <div style="background:#f0f4ff;border:1px solid #c8d4f0;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--blue);">
-        <strong>Como funciona:</strong> selecione a NF Inpasa e/ou o Laudo. O sistema lê os arquivos,
-        identifica o vagão pelo número da placa e vincula automaticamente na linha correta.
-        Se não identificar, você poderá vincular manualmente.
-      </div>
-
-      <div class="form-grid">
-        <div class="form-field full">
-          <label>NF Inpasa (PDF)</label>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <button class="btn-secondary" onclick="document.getElementById('fi-nf-inpasa-batch').click()" style="flex:1;">
-              📄 Selecionar NF Inpasa
-            </button>
-            <span id="nl-nf-name" style="font-size:11px;color:var(--text-muted);flex:2;">Nenhum arquivo</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">📄 NFs Inpasa</div>
+          <div id="nl-dropzone-nf" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;"
+               onclick="document.getElementById('fi-nf-inpasa-batch').click()"
+               ondragover="event.preventDefault();this.style.borderColor='var(--blue)';this.style.background='#f0f4ff';"
+               ondragleave="this.style.borderColor='var(--border)';this.style.background='';"
+               ondrop="event.preventDefault();this.style.borderColor='var(--border)';this.style.background='';nlHandleDrop(event,'nf');">
+            <div style="font-size:24px;margin-bottom:4px;">📄</div>
+            <div style="font-size:11px;font-weight:600;color:var(--blue);">Clique ou arraste</div>
+            <div style="font-size:10px;color:var(--text-muted);">Múltiplos PDFs</div>
           </div>
+          <div id="nl-nf-count" style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:center;"></div>
         </div>
-        <div class="form-field full">
-          <label>Laudo / Certificado (PDF)</label>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <button class="btn-secondary" onclick="document.getElementById('fi-laudo-batch').click()" style="flex:1;">
-              📋 Selecionar Laudo
-            </button>
-            <span id="nl-laudo-name" style="font-size:11px;color:var(--text-muted);flex:2;">Nenhum arquivo</span>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">📋 Laudos</div>
+          <div id="nl-dropzone-laudo" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;"
+               onclick="document.getElementById('fi-laudo-batch').click()"
+               ondragover="event.preventDefault();this.style.borderColor='#7c3aed';this.style.background='#faf5ff';"
+               ondragleave="this.style.borderColor='var(--border)';this.style.background='';"
+               ondrop="event.preventDefault();this.style.borderColor='var(--border)';this.style.background='';nlHandleDrop(event,'laudo');">
+            <div style="font-size:24px;margin-bottom:4px;">📋</div>
+            <div style="font-size:11px;font-weight:600;color:#7c3aed;">Clique ou arraste</div>
+            <div style="font-size:10px;color:var(--text-muted);">Múltiplos PDFs</div>
           </div>
+          <div id="nl-laudo-count" style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:center;"></div>
         </div>
       </div>
-
-      <!-- Preview dos dados extraídos -->
-      <div id="nl-preview" style="display:none;margin-top:12px;">
-        <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Dados extraídos</div>
-        <div id="nl-preview-body" style="font-size:12px;line-height:1.8;"></div>
-      </div>
-
-      <div id="nl-warn" style="display:none;margin-top:10px;padding:8px 12px;border-radius:6px;font-size:12px;"></div>
-
-      <!-- Fallback: vínculo manual se não identificar o vagão -->
-      <div id="nl-manual-wrap" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
-        <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:8px;">⚠️ Vagão não identificado automaticamente — selecione manualmente:</div>
-        <div class="form-field full">
-          <label>Selecione o vagão desta programação</label>
-          <select id="nl-vagao-select">
-            <option value="">Selecione...</option>
-          </select>
+      <div id="nl-status" style="display:none;margin-bottom:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:6px;">
+          Processando <span id="nl-progress">0</span> de <span id="nl-total">0</span> arquivos...
         </div>
+        <div style="background:#edf0f8;border-radius:6px;height:6px;overflow:hidden;">
+          <div id="nl-bar" style="background:var(--blue);height:100%;width:0%;transition:width .3s;"></div>
+        </div>
+      </div>
+      <div id="nl-results" style="display:none;">
+        <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Resultado da leitura</div>
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead>
+              <tr style="background:var(--blue);color:#fff;">
+                <th style="padding:7px 10px;text-align:left;">Arquivo</th>
+                <th style="padding:7px 10px;text-align:left;">Tipo</th>
+                <th style="padding:7px 10px;text-align:left;">NF / Vagão</th>
+                <th style="padding:7px 10px;text-align:left;">Vinculado</th>
+              </tr>
+            </thead>
+            <tbody id="nl-results-body"></tbody>
+          </table>
+        </div>
+        <div id="nl-summary" style="margin-top:8px;font-size:12px;"></div>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn-cancel-m" onclick="closeModal('modal-nf-laudo')">Cancelar</button>
-      <button class="btn-ok" id="nl-apply-btn" onclick="applyNfLaudo()" disabled>Vincular ao vagão</button>
+    <div class="modal-footer" style="position:sticky;bottom:0;background:var(--white);z-index:10;">
+      <button class="btn-cancel-m" onclick="closeModal('modal-nf-laudo')">Fechar</button>
+      <button class="btn-ok" id="nl-apply-btn" onclick="applyNfLaudo()" disabled>✅ Aplicar vinculações</button>
     </div>
   </div>
 </div>
@@ -1363,8 +1374,8 @@ tbody tr { border-bottom:1px solid #edf0f8; }
 
 <input type="file" id="fi-nf-retorno" accept=".pdf">
 <input type="file" id="fi-doc-upload" accept=".pdf,.jpg,.jpeg,.png">
-<input type="file" id="fi-nf-inpasa-batch" accept=".pdf">
-<input type="file" id="fi-laudo-batch" accept=".pdf,.jpg,.jpeg,.png">
+<input type="file" id="fi-nf-inpasa-batch" accept=".pdf" multiple>
+<input type="file" id="fi-laudo-batch" accept=".pdf,.jpg,.jpeg,.png" multiple>
 <input type="file" id="fi-nf-inpasa" accept=".pdf">
 
 
@@ -2621,8 +2632,16 @@ function triggerPdfUpload(progId, vagaoIdx, type) {
   input.value=''; input.click();
 }
 document.getElementById('fi-nf-retorno').addEventListener('change', e => { if (e.target.files[0]) processPdf(e.target.files[0],'retorno'); });
-document.getElementById('fi-nf-inpasa-batch').addEventListener('change', () => nlProcessFile('nf'));
-document.getElementById('fi-laudo-batch').addEventListener('change', () => nlProcessFile('laudo'));
+document.getElementById('fi-nf-inpasa-batch').addEventListener('change', e => {
+  _nlNfFiles = Array.from(e.target.files);
+  document.getElementById('nl-nf-count').textContent = _nlNfFiles.length ? _nlNfFiles.length + ' arquivo(s)' : '';
+  if (_nlNfFiles.length) nlProcessAll();
+});
+document.getElementById('fi-laudo-batch').addEventListener('change', e => {
+  _nlLaudoFiles = Array.from(e.target.files);
+  document.getElementById('nl-laudo-count').textContent = _nlLaudoFiles.length ? _nlLaudoFiles.length + ' arquivo(s)' : '';
+  if (_nlLaudoFiles.length) nlProcessAll();
+});
 
 document.getElementById('fi-doc-upload').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -3460,6 +3479,276 @@ function stopRealtimeListeners() {
 
 
 // ══════════════════════════════════════════
+// INPUT NOTAS TERMINAL — LOTE (batch)
+// ══════════════════════════════════════════
+// INPUT NOTAS TERMINAL — LOTE
+// ══════════════════════════════════════════
+let _btProgIds  = [];
+let _btTermName = '';
+let _btResults = []; // array of {file, vagaoNum, nfNum, volume, lacre, pedidoNF, vagaoIdx, status}
+
+function openBatchTerminalModal(progIdsStr, termName) {
+  _btProgIds  = (progIdsStr||'').split(',').filter(Boolean);
+  _btTermName = termName || '';
+  _btResults = [];
+  document.getElementById('bt-status').style.display  = 'none';
+  document.getElementById('bt-results').style.display = 'none';
+  document.getElementById('bt-apply-btn').disabled    = true;
+  document.getElementById('fi-batch-terminal').value  = '';
+  openModal('modal-batch-terminal');
+}
+
+function handleBatchTerminalDrop(e) {
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (files.length) processBatchTerminal(files);
+}
+
+document.getElementById('fi-batch-terminal').addEventListener('change', e => {
+  const files = Array.from(e.target.files);
+  if (files.length) processBatchTerminal(files);
+});
+
+async function processBatchTerminal(files) {
+  const allProgs = ProgAPI.list().filter(p => _btProgIds.includes(p.id));
+  if (!allProgs.length) return;
+
+  _btResults = [];
+  const _usedSlots = {}; // tracks {progId_vagaoIdx: true} allocated in this batch
+  const statusEl   = document.getElementById('bt-status');
+  const progressEl = document.getElementById('bt-progress');
+  const totalEl    = document.getElementById('bt-total');
+  const barEl      = document.getElementById('bt-bar');
+  const resultsEl  = document.getElementById('bt-results');
+  const bodyEl     = document.getElementById('bt-results-body');
+
+  statusEl.style.display  = 'block';
+  resultsEl.style.display = 'none';
+  totalEl.textContent     = files.length;
+  progressEl.textContent  = '0';
+  barEl.style.width       = '0%';
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    progressEl.textContent = i + 1;
+    barEl.style.width      = `${Math.round(((i+1)/files.length)*100)}%`;
+
+    let row = { file, vagaoNum: null, nfNum: null, volume: null, lacre: null, pedidoNF: null, vagaoIdx: -1, progId: _btProgIds[0], status: '❌ Não identificado' };
+
+    try {
+      const text     = await extractPdfText(file);
+      row.vagaoNum   = extractVagaoNumber(text);
+      row.nfNum      = extractNfNumber(text);
+      row.volume     = extractVolume(text);
+      row.lacre      = extractLacre(text);
+      row.pedidoNF   = extractPedido(text);
+      row._text      = text;
+      row._file      = file;
+
+      // ── VALIDAÇÃO: NF já existe no sistema? ──
+      if (row.nfNum) {
+        // Verifica em todas as programações carregadas (não só deste terminal)
+        const todasProgs = ProgAPI.list();
+        for (const p of todasProgs) {
+          for (const v of p.vagoes) {
+            if ((v.nfRetorno||'').trim() === String(row.nfNum).trim()) {
+              const dataFmt = p.data ? fmtDate(p.data) : '?';
+              row.status    = `❌ NF ${row.nfNum} já lançada — Data ${dataFmt} · Pedido ${p.pedido}`;
+              row.vagaoIdx  = -1;
+              row.duplicate = true;
+              break;
+            }
+          }
+          if (row.duplicate) break;
+        }
+        // Também verifica duplicata dentro do próprio lote atual
+        if (!row.duplicate) {
+          const jaNoLote = _btResults.find(r => r.nfNum && String(r.nfNum) === String(row.nfNum));
+          if (jaNoLote) {
+            row.status   = `❌ NF ${row.nfNum} duplicada neste lote (já consta em outro arquivo)`;
+            row.vagaoIdx = -1;
+            row.duplicate = true;
+          }
+        }
+      }
+
+      // ── MATCHING — só executa se não for duplicata ──
+      if (!row.duplicate) {
+
+      // Prioridade 1: Vagão já registrado (placa bate exatamente)
+      if (row.vagaoNum) {
+        const norm = row.vagaoNum.toUpperCase();
+        for (const p of allProgs) {
+          const vi = p.vagoes.findIndex(v =>
+            (v.vagao||'').replace(/[\s\-]/g,'').toUpperCase() === norm
+          );
+          if (vi >= 0) {
+            const slotKey = `${p.id}_${vi}`;
+            if (!_usedSlots[slotKey]) {
+              _usedSlots[slotKey] = true;
+              row.progId = p.id; row.vagaoIdx = vi;
+              row.status = `✅ Vagão ${row.vagaoNum} → Ped.${p.pedido} Vg.${vi+1}`;
+            } else {
+              row.status = `⚠️ Vagão ${row.vagaoNum} já alocado neste lote`;
+            }
+            break;
+          }
+        }
+      }
+
+      // Prioridade 2: Pedido identificado → próximo slot livre deste pedido
+      if (row.vagaoIdx < 0 && row.pedidoNF) {
+        let found = false;
+        for (const p of allProgs) {
+          if (String(p.pedido).trim() !== String(row.pedidoNF).trim()) continue;
+          found = true;
+          // Próximo vagão sem NF E não alocado neste lote
+          let allocated = false;
+          for (let vi = 0; vi < p.vagoes.length; vi++) {
+            const v       = p.vagoes[vi];
+            const slotKey = `${p.id}_${vi}`;
+            if (!(v.nfRetorno||'').trim() && !_usedSlots[slotKey]) {
+              _usedSlots[slotKey] = true;
+              row.progId = p.id; row.vagaoIdx = vi;
+              row.status = `✅ Ped.${p.pedido} → Vagão ${vi+1}`;
+              allocated  = true;
+              break;
+            }
+          }
+          if (!allocated) {
+            // Todos os vagões deste pedido já têm NF ou foram alocados neste lote
+            const total    = p.vagoes.length;
+            const comNf    = p.vagoes.filter(v => (v.nfRetorno||'').trim()).length;
+            const alocados = Object.keys(_usedSlots).filter(k => k.startsWith(p.id+'_')).length;
+            row.status = `❌ Excesso! Ped.${p.pedido} tem ${total} vagões, ${comNf} com NF, ${alocados} alocados neste lote`;
+          }
+          break;
+        }
+        if (!found) {
+          row.status = `⚠️ Pedido ${row.pedidoNF} não encontrado neste terminal`;
+        }
+      }
+
+      // Sem match algum
+      if (row.vagaoIdx < 0 && !row.status.startsWith('⚠️') && !row.status.startsWith('❌')) {
+        row.progId = _btProgIds[0];
+        row.status = row.vagaoNum
+          ? `⚠️ Vagão ${row.vagaoNum} não encontrado`
+          : '❌ Pedido/Vagão não identificado na NF';
+      }
+
+      } // end if (!row.duplicate)
+
+    } catch(e) {
+      row.status = '❌ Erro ao ler PDF';
+    }
+
+    _btResults.push(row);
+  }
+
+  // Render results
+  statusEl.style.display  = 'none';
+  resultsEl.style.display = 'block';
+
+  bodyEl.innerHTML = _btResults.map((r, i) => `
+    <tr style="border-bottom:1px solid #edf0f8;${r.vagaoIdx>=0?'background:#f0fdf4':''}">
+      <td style="padding:6px 10px;font-size:10px;color:var(--text-muted);">${r.file.name.replace(/\.pdf$/i,'').substring(0,25)}</td>
+      <td style="padding:6px 10px;font-weight:600;">${r.vagaoNum||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">${r.nfNum||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">${r.volume||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">${r.lacre||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">${r.pedidoNF||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">
+        ${r.vagaoIdx>=0
+          ? `<span style="color:var(--green);font-weight:700;font-size:11px;">${r.status}</span>`
+          : `<span style="color:${r.status.startsWith('❌')? '#b91c1c':'#92400e'};font-weight:700;font-size:11px;">${r.status}</span>
+             <select onchange="btManualSelect(${i},this.value)" style="margin-top:4px;font-size:10px;display:block;width:100%;padding:2px;">
+               <option value="">Alocar manualmente...</option>
+               ${ProgAPI.list().filter(p=>_btProgIds.includes(p.id)).flatMap(p=>
+                 p.vagoes.map((v,vi)=>
+                   `<option value="${p.id}|${vi}">Ped.${p.pedido} · Vagão ${vi+1}${v.vagao?' ('+v.vagao+')':' (vazio)'}</option>`
+                 )
+               ).join('')}
+             </select>`
+        }
+      </td>
+    </tr>`).join('');
+
+  const matched   = _btResults.filter(r => r.vagaoIdx >= 0).length;
+  const overflow  = _btResults.filter(r => r.status.startsWith('❌') && !r.duplicate).length;
+  const dupes     = _btResults.filter(r => r.duplicate).length;
+  const warn      = _btResults.filter(r => r.status.startsWith('⚠️')).length;
+  let summary     = `<strong>${matched}</strong> de <strong>${_btResults.length}</strong> NFs vinculadas. `;
+  if (dupes    > 0) summary += `<span style="color:#b91c1c;font-weight:700;">❌ ${dupes} já existem no sistema.</span> `;
+  if (overflow > 0) summary += `<span style="color:#b91c1c;font-weight:700;">❌ ${overflow} excedem vagões disponíveis.</span> `;
+  if (warn     > 0) summary += `<span style="color:#92400e;">⚠️ ${warn} não identificadas.</span> `;
+  if (matched === _btResults.length) summary += `<span style="color:var(--green);">✅ Tudo pronto!</span>`;
+  document.getElementById('bt-summary').innerHTML = summary;
+
+  document.getElementById('bt-apply-btn').disabled = matched === 0;
+}
+
+function btManualSelect(idx, value) {
+  if (!value || value==='-1') return;
+  const parts = value.split('|');
+  _btResults[idx].progId   = parts[0];
+  _btResults[idx].vagaoIdx = parseInt(parts[1]);
+  _btResults[idx].status   = '✅ Selecionado manualmente';
+  document.getElementById('bt-apply-btn').disabled = !_btResults.some(r=>r.vagaoIdx>=0);
+}
+
+async function applyBatchTerminal() {
+  const toApply = _btResults.filter(r => r.vagaoIdx >= 0);
+  if (!toApply.length) { toast('Nenhuma NF vinculada.', true); return; }
+
+  showLoading(`Aplicando ${toApply.length} NF(s)...`);
+  try {
+    const at = fmtDateTime();
+    for (const r of toApply) {
+      const prog = ProgAPI.list().find(p => p.id === (r.progId || _btProgIds[0]));
+      if (!prog) continue;
+      const v = prog.vagoes[r.vagaoIdx];
+      if (!v) continue;
+
+      const updates = {};
+      if (r.vagaoNum && !v.vagao)      { v.vagao = r.vagaoNum; updates.vagao = r.vagaoNum; }
+      if (r.nfNum && !v.nfRetorno)     { v.nfRetorno = r.nfNum; updates.nfRetorno = r.nfNum; }
+      if (r.volume && !v.volume)       { v.volume = r.volume; updates.volume = r.volume; }
+      if (r.lacre && !v.lacre)         { v.lacre = r.lacre; updates.lacre = r.lacre; }
+      if (r._file) {
+        v.nfRetornoFile = r._file.name;
+        v.nfRetornoAt   = at;
+        v.nfRetornoFileObj = r._file;
+        updates.nfRetornoFile = r._file.name;
+        updates.nfRetornoAt   = at;
+        // Save PDF to Firestore
+        if (v.vid) {
+          try {
+            const reader = new FileReader();
+            const b64 = await new Promise((res, rej) => {
+              reader.onload  = () => res(reader.result.split(',')[1]);
+              reader.onerror = () => rej(new Error('read error'));
+              reader.readAsDataURL(r._file);
+            });
+            await db.collection('programacoes').doc(r.progId||_btProgIds[0])
+              .collection('vagoes').doc(v.vid)
+              .collection('pdfData').doc('retorno')
+              .set({ data: b64, fileName: r._file.name, sizeBytes: r._file.size, uploadedAt: at });
+          } catch(e) { console.warn('pdfData save:', e); }
+        }
+      }
+      if (v.vid && Object.keys(updates).length) {
+        await ProgAPI.updateVagao(r.progId||_btProgIds[0], v.vid, updates);
+      }
+    }
+    closeModal('modal-batch-terminal');
+    renderTable();
+    toast(`✅ ${toApply.length} NF(s) aplicadas com sucesso!`);
+  } catch(e) {
+    console.error('applyBatchTerminal:', e);
+    toast('Erro: ' + e.message, true);
+  } finally { hideLoading(); }
+}
+
 // NOVA PROGRAMAÇÃO EM LOTE
 // ══════════════════════════════════════════
 let _npPedidoCount = 0;
@@ -3671,16 +3960,13 @@ async function saveNovaProg() {
 let _nlCtx = { progId: null, nfFile: null, laudoFile: null, nfData: null, laudoData: null };
 
 function normalizeSpacedText(text) {
-  // Colapsa espaços entre dígitos: "0 0 0 1 8 2 3 3 9" → "000182339"
   let t = text.replace(/(\d)\s+(?=\d)/g, '$1');
-  // Colapsa "N º" → "Nº" e "S É R I E" → "SÉRIE"
   t = t.replace(/N\s+[º°o]/gi, 'Nº');
   t = t.replace(/S\s*É\s*R\s*I\s*E/gi, 'SÉRIE');
   return t;
 }
 
 function extractFromCT(text) {
-  // CT/Laudo da Inpasa: extrai vagão, lacre, NF e volume
   const t = normalizeSpacedText(text);
   const vagao = (() => {
     const m = t.match(/Placa[s]?[:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/i);
@@ -3688,14 +3974,13 @@ function extractFromCT(text) {
     const d = m[2].replace(/\D/g,'');
     return d.length === 7 ? m[1].toUpperCase() + d : null;
   })();
-  const lacre = (t.match(/Lacre[s]?[:\s]+(\d{4,10})/i)||[])[1] || null;
-  const nf    = (() => {
+  const lacre  = (t.match(/Lacre[s]?[:\s]+(\d{4,10})/i)||[])[1] || null;
+  const nf = (() => {
     const m = t.match(/Nota\(s\)\s*Fiscal\(is\)[:\s]*(\d+)/i) ||
               t.match(/N[º°o]\.?\s*(0*\d{5,9})\s+S[ÉE]RIE/i);
     return m ? m[1].replace(/^0+/,'') : null;
   })();
   const volume = (() => {
-    // "Vol. 20°C (L): 99.666,000" ou "Vol. Faturado (L): 99.666,000"
     const m = t.match(/Vol\.?\s*(?:20\s*°C|Faturado)\s*\(L\)[:\s]*([\d.,]+)/i);
     if (!m) return null;
     let v = m[1].replace(/\./g,'').replace(',','.');
@@ -3705,15 +3990,12 @@ function extractFromCT(text) {
 }
 
 function extractFromNfInpasa(text) {
-  // NF Inpasa: pode ter espaços entre caracteres
   const t = normalizeSpacedText(text);
   const nf = (() => {
-    // Padrão A: Nº 000182339 SÉRIE
     const m = t.match(/N[º°o]\.?\s*(0*\d{5,9})\s+S[ÉE]RIE/i) ||
               t.match(/N[º°o]\.?\s*[\n]?\s*(0*\d{5,9})/i);
     return m ? m[1].replace(/\./g,'').replace(/^0+/,'') : null;
   })();
-  // Vagão na NF Inpasa: aparece como "PLACA TCT0533327" ou no campo de transportador
   const vagao = (() => {
     const m = t.match(/PLAC[AO][:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/i);
     if (!m) return null;
@@ -3727,803 +4009,228 @@ function extractFromNfInpasa(text) {
 function findVagaoByPlate(prog, vagaoStr) {
   if (!vagaoStr) return -1;
   const norm = vagaoStr.replace(/[\s\-]/g,'').toUpperCase();
-  return prog.vagoes.findIndex(v => {
-    const vn = (v.vagao||'').replace(/[\s\-]/g,'').toUpperCase();
-    return vn === norm;
-  });
+  return prog.vagoes.findIndex(v =>
+    (v.vagao||'').replace(/[\s\-]/g,'').toUpperCase() === norm
+  );
 }
 
+// ══════════════════════════════════════════
+// NF + LAUDO INPASA — LOTE
+// ══════════════════════════════════════════
+let _nlProgId    = null;
+let _nlNfFiles   = [];
+let _nlLaudoFiles= [];
+let _nlResults   = [];
+
 function openNfLaudoModal(progId) {
-  _nlCtx = { progId, nfFile: null, laudoFile: null, nfData: null, laudoData: null };
-
-  // Reset UI
-  document.getElementById('nl-nf-name').textContent    = 'Nenhum arquivo';
-  document.getElementById('nl-laudo-name').textContent = 'Nenhum arquivo';
-  document.getElementById('nl-preview').style.display  = 'none';
-  document.getElementById('nl-warn').style.display     = 'none';
-  document.getElementById('nl-manual-wrap').style.display = 'none';
-  document.getElementById('nl-apply-btn').disabled     = true;
-  document.getElementById('fi-nf-inpasa-batch').value  = '';
-  document.getElementById('fi-laudo-batch').value      = '';
-
-  // Populate vagão select for manual fallback
-  const prog = ProgAPI.list().find(p => p.id === progId);
-  const sel  = document.getElementById('nl-vagao-select');
-  sel.innerHTML = '<option value="">Selecione...</option>' +
-    (prog?.vagoes||[]).map((v,i) =>
-      `<option value="${i}">Vagão ${i+1}${v.vagao ? ' — '+v.vagao : ''}</option>`
-    ).join('');
-
+  _nlProgId      = progId;
+  _nlNfFiles     = [];
+  _nlLaudoFiles  = [];
+  _nlResults     = [];
+  document.getElementById('nl-nf-count').textContent    = '';
+  document.getElementById('nl-laudo-count').textContent = '';
+  document.getElementById('nl-status').style.display    = 'none';
+  document.getElementById('nl-results').style.display   = 'none';
+  document.getElementById('nl-apply-btn').disabled      = true;
+  document.getElementById('fi-nf-inpasa-batch').value   = '';
+  document.getElementById('fi-laudo-batch').value       = '';
   openModal('modal-nf-laudo');
 }
 
-async function nlProcessFile(type) {
-  const inputId = type === 'nf' ? 'fi-nf-inpasa-batch' : 'fi-laudo-batch';
-  const nameId  = type === 'nf' ? 'nl-nf-name' : 'nl-laudo-name';
-  const input   = document.getElementById(inputId);
-  const file    = input.files[0];
-  if (!file) return;
-
-  document.getElementById(nameId).textContent = file.name;
-  showLoading('Lendo ' + (type === 'nf' ? 'NF Inpasa' : 'Laudo') + '...');
-
-  try {
-    const text = await extractPdfText(file);
-    if (type === 'nf') {
-      _nlCtx.nfFile = file;
-      _nlCtx.nfData = extractFromNfInpasa(text);
-      _nlCtx.nfData._rawText = text;
-    } else {
-      _nlCtx.laudoFile = file;
-      _nlCtx.laudoData = extractFromCT(text);
-      _nlCtx.laudoData._rawText = text;
-    }
-    nlUpdatePreview();
-  } catch(e) {
-    toast('Erro ao ler arquivo: ' + e.message, true);
-  } finally { hideLoading(); }
+function nlHandleDrop(e, type) {
+  const files = Array.from(e.dataTransfer.files).filter(f =>
+    f.name.toLowerCase().match(/\.(pdf|jpg|jpeg|png)$/));
+  if (!files.length) return;
+  if (type === 'nf') {
+    _nlNfFiles = files;
+    document.getElementById('nl-nf-count').textContent = files.length + ' arquivo(s)';
+  } else {
+    _nlLaudoFiles = files;
+    document.getElementById('nl-laudo-count').textContent = files.length + ' arquivo(s)';
+  }
+  nlProcessAll();
 }
 
-function nlUpdatePreview() {
-  const nf    = _nlCtx.nfData;
-  const ct    = _nlCtx.laudoData;
-  const prog  = ProgAPI.list().find(p => p.id === _nlCtx.progId);
-
-  // Merge dados: CT tem prioridade para vagão e lacre
-  const vagaoStr = ct?.vagao  || nf?.vagao  || null;
-  const lacre    = ct?.lacre  || nf?.lacre  || null;
-  const nfNum    = nf?.nf     || ct?.nf     || null;
-  const volume   = ct?.volume || null;
-
-  const vagaoIdx = prog ? findVagaoByPlate(prog, vagaoStr) : -1;
-
-  // Preview
-  const preview = document.getElementById('nl-preview');
-  const body    = document.getElementById('nl-preview-body');
-  const warn    = document.getElementById('nl-warn');
-  const manual  = document.getElementById('nl-manual-wrap');
-  const applyBtn = document.getElementById('nl-apply-btn');
-
-  if (!nf && !ct) { preview.style.display = 'none'; return; }
-
-  let rows = '';
-  rows += `<div>📄 <strong>NF Inpasa:</strong> ${nfNum || '<em style="color:var(--text-muted)">não identificado</em>'}</div>`;
-  rows += `<div>🚃 <strong>Vagão:</strong> ${vagaoStr || '<em style="color:var(--text-muted)">não identificado</em>'}`;
-  if (vagaoStr && vagaoIdx >= 0) rows += ` <span style="color:var(--green);font-weight:700;">→ Vagão ${vagaoIdx+1} ✅</span>`;
-  else if (vagaoStr) rows += ` <span style="color:var(--red);font-weight:600;">→ não encontrado nesta programação</span>`;
-  rows += '</div>';
-  rows += `<div>🔒 <strong>Lacre:</strong> ${lacre || '<em style="color:var(--text-muted)">não identificado</em>'}</div>`;
-  if (volume) rows += `<div>📦 <strong>Volume:</strong> ${volume} L</div>`;
-
-  body.innerHTML = rows;
-  preview.style.display = 'block';
-
-  // Store merged data for apply
-  _nlCtx._merged = { vagaoStr, vagaoIdx, nfNum, lacre, volume };
-
-  if (vagaoIdx >= 0) {
-    // Auto match found
-    warn.style.display  = 'none';
-    manual.style.display = 'none';
-    applyBtn.disabled   = false;
-  } else if (vagaoStr || nfNum) {
-    // Files read but vagão not matched — show manual select
-    warn.style.display       = 'block';
-    warn.style.background    = '#fef3c7';
-    warn.style.color         = '#92400e';
-    warn.textContent         = vagaoStr
-      ? `⚠️ Vagão "${vagaoStr}" não encontrado nesta programação. Selecione manualmente abaixo.`
-      : '⚠️ Vagão não identificado nos arquivos. Selecione manualmente abaixo.';
-    manual.style.display     = 'block';
-    applyBtn.disabled        = false; // enable but will check manual select
-  } else {
-    warn.style.display   = 'block';
-    warn.style.background = '#fee2e2';
-    warn.style.color      = '#b91c1c';
-    warn.textContent      = '❌ Não foi possível extrair dados. Verifique os arquivos.';
-    applyBtn.disabled     = true;
+async function nlProcessAll() {
+  const prog = ProgAPI.list().find(p => p.id === _nlProgId);
+  if (!prog) return;
+  const allFiles = [
+    ..._nlNfFiles.map(f    => ({ file: f, type: 'nf' })),
+    ..._nlLaudoFiles.map(f => ({ file: f, type: 'laudo' })),
+  ];
+  if (!allFiles.length) return;
+  _nlResults = [];
+  const statusEl   = document.getElementById('nl-status');
+  const progressEl = document.getElementById('nl-progress');
+  const totalEl    = document.getElementById('nl-total');
+  const barEl      = document.getElementById('nl-bar');
+  statusEl.style.display  = 'block';
+  document.getElementById('nl-results').style.display = 'none';
+  totalEl.textContent     = allFiles.length;
+  progressEl.textContent  = '0';
+  barEl.style.width       = '0%';
+  const _usedNfSlots    = {};
+  const _usedLaudoSlots = {};
+  for (let i = 0; i < allFiles.length; i++) {
+    const { file, type } = allFiles[i];
+    progressEl.textContent = i + 1;
+    barEl.style.width = Math.round(((i+1)/allFiles.length)*100) + '%';
+    const row = { file, type, nf: null, vagao: null, lacre: null, volume: null, vagaoIdx: -1, status: '❌ Não identificado' };
+    try {
+      const text = await extractPdfText(file);
+      if (type === 'nf') {
+        const data = extractFromNfInpasa(text);
+        row.nf = data.nf; row.vagao = data.vagao; row.lacre = data.lacre;
+        if (row.nf) {
+          let dup = false;
+          for (const p of ProgAPI.list()) {
+            for (const v of p.vagoes) {
+              if ((v.nfInpasa||'').trim() === String(row.nf).trim()) {
+                row.status = '❌ NF ' + row.nf + ' já lançada — Data ' + fmtDate(p.data) + ' · Pedido ' + p.pedido;
+                row.duplicate = true; dup = true; break;
+              }
+            }
+            if (dup) break;
+          }
+          if (!dup) {
+            const jaNoLote = _nlResults.find(r => r.type==='nf' && r.nf && String(r.nf)===String(row.nf));
+            if (jaNoLote) { row.status = '❌ NF ' + row.nf + ' duplicada neste lote'; row.duplicate = true; }
+          }
+        }
+        if (!row.duplicate) {
+          if (row.vagao) {
+            const vi = findVagaoByPlate(prog, row.vagao);
+            const sk = prog.id + '_' + vi;
+            if (vi >= 0 && !_usedNfSlots[sk]) {
+              _usedNfSlots[sk] = true; row.vagaoIdx = vi;
+              row.status = '✅ Vagão ' + row.vagao + ' → Vg.' + (vi+1);
+            }
+          }
+          if (row.vagaoIdx < 0) {
+            for (let vi = 0; vi < prog.vagoes.length; vi++) {
+              const sk = prog.id + '_' + vi;
+              if (!(prog.vagoes[vi].nfInpasa||'').trim() && !_usedNfSlots[sk]) {
+                _usedNfSlots[sk] = true; row.vagaoIdx = vi;
+                row.status = '✅ → Vagão ' + (vi+1); break;
+              }
+            }
+          }
+          if (row.vagaoIdx < 0) row.status = '❌ Sem vagão disponível para NF Inpasa';
+        }
+      } else {
+        const data = extractFromCT(text);
+        row.nf = data.nf; row.vagao = data.vagao; row.lacre = data.lacre; row.volume = data.volume;
+        if (row.vagao) {
+          const vi = findVagaoByPlate(prog, row.vagao);
+          const sk = prog.id + '_' + vi;
+          if (vi >= 0 && !_usedLaudoSlots[sk]) {
+            _usedLaudoSlots[sk] = true; row.vagaoIdx = vi;
+            row.status = '✅ Vagão ' + row.vagao + ' → Vg.' + (vi+1);
+          }
+        }
+        if (row.vagaoIdx < 0) {
+          for (let vi = 0; vi < prog.vagoes.length; vi++) {
+            const sk = prog.id + '_' + vi;
+            if (!prog.vagoes[vi].laudoFile && !_usedLaudoSlots[sk]) {
+              _usedLaudoSlots[sk] = true; row.vagaoIdx = vi;
+              row.status = '✅ → Vagão ' + (vi+1); break;
+            }
+          }
+        }
+        if (row.vagaoIdx < 0) row.status = '❌ Sem vagão disponível para Laudo';
+      }
+    } catch(e) { row.status = '❌ Erro ao ler arquivo'; }
+    _nlResults.push(row);
   }
+  statusEl.style.display = 'none';
+  document.getElementById('nl-results').style.display = 'block';
+  const bodyEl = document.getElementById('nl-results-body');
+  bodyEl.innerHTML = _nlResults.map((r, i) =>
+    '<tr style="border-bottom:1px solid #edf0f8;' + (r.vagaoIdx>=0?'background:#f0fdf4':'') + '">' +
+    '<td style="padding:6px 10px;font-size:10px;color:var(--text-muted);">' + r.file.name.substring(0,28) + '</td>' +
+    '<td style="padding:6px 10px;"><span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;' +
+      (r.type==='nf'?'background:#e0f2fe;color:#0369a1':'background:#ede9f8;color:#7c3aed') + '">' +
+      (r.type==='nf'?'NF Inpasa':'Laudo') + '</span></td>' +
+    '<td style="padding:6px 10px;font-size:11px;">' + (r.nf?'<strong>NF '+r.nf+'</strong> ':'') + (r.vagao?'· '+r.vagao:'') + '</td>' +
+    '<td style="padding:6px 10px;">' +
+      (r.vagaoIdx>=0
+        ? '<span style="color:var(--green);font-weight:700;font-size:11px;">' + r.status + '</span>'
+        : '<span style="color:#b91c1c;font-weight:700;font-size:11px;">' + r.status + '</span>' +
+          (!r.duplicate ? '<select onchange="nlManualSelect(' + i + ',this.value)" style="margin-top:4px;font-size:10px;display:block;width:100%;padding:2px;">' +
+            '<option value="">Selecionar vagão...</option>' +
+            (ProgAPI.list().find(p=>p.id===_nlProgId)?.vagoes||[]).map((v,vi) =>
+              '<option value="' + vi + '">Vagão ' + (vi+1) + (v.vagao?' ('+v.vagao+')':'') + '</option>'
+            ).join('') +
+          '</select>' : '')
+      ) +
+    '</td></tr>'
+  ).join('');
+  const matched = _nlResults.filter(r=>r.vagaoIdx>=0).length;
+  const dupes   = _nlResults.filter(r=>r.duplicate).length;
+  const errors  = _nlResults.filter(r=>r.vagaoIdx<0&&!r.duplicate).length;
+  let summary = '<strong>' + matched + '</strong> de <strong>' + _nlResults.length + '</strong> vinculados. ';
+  if (dupes  > 0) summary += '<span style="color:#b91c1c;font-weight:700;">❌ ' + dupes + ' já existem no sistema.</span> ';
+  if (errors > 0) summary += '<span style="color:#92400e;">⚠️ ' + errors + ' não identificados.</span> ';
+  if (matched === _nlResults.length) summary += '<span style="color:var(--green);">✅ Tudo pronto!</span>';
+  document.getElementById('nl-summary').innerHTML = summary;
+  document.getElementById('nl-apply-btn').disabled = matched === 0;
+}
+
+function nlManualSelect(idx, value) {
+  if (!value) return;
+  _nlResults[idx].vagaoIdx = parseInt(value);
+  _nlResults[idx].status   = '✅ Selecionado manualmente';
+  document.getElementById('nl-apply-btn').disabled = !_nlResults.some(r=>r.vagaoIdx>=0);
 }
 
 async function applyNfLaudo() {
-  const prog    = ProgAPI.list().find(p => p.id === _nlCtx.progId);
+  const prog = ProgAPI.list().find(p => p.id === _nlProgId);
   if (!prog) return;
-
-  let { vagaoIdx, nfNum, lacre, volume } = _nlCtx._merged || {};
-
-  // Check manual selection if auto didn't find
-  if (vagaoIdx < 0 || vagaoIdx === undefined) {
-    const sel = document.getElementById('nl-vagao-select');
-    vagaoIdx = parseInt(sel.value);
-    if (isNaN(vagaoIdx) || vagaoIdx < 0) {
-      toast('Selecione o vagão manualmente.', true); return;
-    }
-  }
-
-  const v = prog.vagoes[vagaoIdx];
-  if (!v) { toast('Vagão não encontrado.', true); return; }
-
-  showLoading('Vinculando ao Vagão ' + (vagaoIdx+1) + '...');
-  try {
-    const at = fmtDateTime();
-    const updates = {};
-
-    // Apply NF Inpasa
-    if (_nlCtx.nfFile && nfNum) {
-      v.nfInpasa     = nfNum;
-      v.nfInpasaFile = _nlCtx.nfFile.name;
-      v.nfInpasaAt   = at;
-      v.nfInpasaFileObj = _nlCtx.nfFile;
-      updates.nfInpasa    = nfNum;
-      updates.nfInpasaFile = _nlCtx.nfFile.name;
-      updates.nfInpasaAt  = at;
-      // Store PDF in Firestore
-      if (v.vid) {
-        const reader = new FileReader();
-        const b64 = await new Promise(res => {
-          reader.onload = () => res(reader.result.split(',')[1]);
-          reader.readAsDataURL(_nlCtx.nfFile);
-        });
-        await db.collection('programacoes').doc(_nlCtx.progId)
-          .collection('vagoes').doc(v.vid)
-          .collection('pdfData').doc('inpasa')
-          .set({ data: b64, fileName: _nlCtx.nfFile.name, sizeBytes: _nlCtx.nfFile.size, uploadedAt: at });
-      }
-    }
-
-    // Apply Laudo
-    if (_nlCtx.laudoFile) {
-      v.laudoFile    = _nlCtx.laudoFile.name;
-      v.laudoAt      = at;
-      v.laudoFileObj = _nlCtx.laudoFile;
-      updates.laudoFile = _nlCtx.laudoFile.name;
-      updates.laudoAt   = at;
-      // Save PDF content to Firestore
-      if (v.vid) {
-        try {
-          const reader = new FileReader();
-          const b64 = await new Promise((res, rej) => {
-            reader.onload  = () => res(reader.result.split(',')[1]);
-            reader.onerror = () => rej(new Error('Erro ao ler laudo'));
-            reader.readAsDataURL(_nlCtx.laudoFile);
-          });
-          await db.collection('programacoes').doc(_nlCtx.progId)
-            .collection('vagoes').doc(v.vid)
-            .collection('pdfData').doc('laudo')
-            .set({ data: b64, fileName: _nlCtx.laudoFile.name, sizeBytes: _nlCtx.laudoFile.size, uploadedAt: at });
-        } catch(e) { console.warn('Laudo pdfData save (batch):', e); }
-      }
-    }
-
-    // Apply lacre if not already set
-    if (lacre && !v.lacre) {
-      v.lacre = lacre;
-      updates.lacre = lacre;
-    }
-
-    // Apply volume if not already set
-    if (volume && !v.volume) {
-      v.volume = volume;
-      updates.volume = volume;
-    }
-
-    // Save to Firestore
-    if (v.vid && Object.keys(updates).length) {
-      await ProgAPI.updateVagao(_nlCtx.progId, v.vid, updates);
-    }
-
-    closeModal('modal-nf-laudo');
-    renderTable();
-    toast(`✅ NF + Laudo vinculados ao Vagão ${vagaoIdx+1}!`);
-  } catch(e) {
-    console.error('applyNfLaudo:', e);
-    toast('Erro ao vincular: ' + e.message, true);
-  } finally { hideLoading(); }
-}
-
-// File input listeners for batch NF+Laudo
-
-// ══════════════════════════════════════════
-// INPUT NOTAS TERMINAL — LOTE
-// ══════════════════════════════════════════
-let _btProgIds  = [];
-let _btTermName = '';
-let _btResults = []; // array of {file, vagaoNum, nfNum, volume, lacre, pedidoNF, vagaoIdx, status}
-
-function openBatchTerminalModal(progIdsStr, termName) {
-  _btProgIds  = (progIdsStr||'').split(',').filter(Boolean);
-  _btTermName = termName || '';
-  _btResults = [];
-  document.getElementById('bt-status').style.display  = 'none';
-  document.getElementById('bt-results').style.display = 'none';
-  document.getElementById('bt-apply-btn').disabled    = true;
-  document.getElementById('fi-batch-terminal').value  = '';
-  openModal('modal-batch-terminal');
-}
-
-function handleBatchTerminalDrop(e) {
-  const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-  if (files.length) processBatchTerminal(files);
-}
-
-document.getElementById('fi-batch-terminal').addEventListener('change', e => {
-  const files = Array.from(e.target.files);
-  if (files.length) processBatchTerminal(files);
-});
-
-async function processBatchTerminal(files) {
-  const allProgs = ProgAPI.list().filter(p => _btProgIds.includes(p.id));
-  if (!allProgs.length) return;
-
-  _btResults = [];
-  const _usedSlots = {}; // tracks {progId_vagaoIdx: true} allocated in this batch
-  const statusEl   = document.getElementById('bt-status');
-  const progressEl = document.getElementById('bt-progress');
-  const totalEl    = document.getElementById('bt-total');
-  const barEl      = document.getElementById('bt-bar');
-  const resultsEl  = document.getElementById('bt-results');
-  const bodyEl     = document.getElementById('bt-results-body');
-
-  statusEl.style.display  = 'block';
-  resultsEl.style.display = 'none';
-  totalEl.textContent     = files.length;
-  progressEl.textContent  = '0';
-  barEl.style.width       = '0%';
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    progressEl.textContent = i + 1;
-    barEl.style.width      = `${Math.round(((i+1)/files.length)*100)}%`;
-
-    let row = { file, vagaoNum: null, nfNum: null, volume: null, lacre: null, pedidoNF: null, vagaoIdx: -1, progId: _btProgIds[0], status: '❌ Não identificado' };
-
-    try {
-      const text     = await extractPdfText(file);
-      row.vagaoNum   = extractVagaoNumber(text);
-      row.nfNum      = extractNfNumber(text);
-      row.volume     = extractVolume(text);
-      row.lacre      = extractLacre(text);
-      row.pedidoNF   = extractPedido(text);
-      row.cnpjDest   = extractCnpjDestinatario(text);
-      row._text      = text;
-      row._file      = file;
-
-      // ── VALIDAÇÃO: NF já existe no sistema? ──
-      if (row.nfNum) {
-        // Verifica em todas as programações carregadas (não só deste terminal)
-        const todasProgs = ProgAPI.list();
-        for (const p of todasProgs) {
-          for (const v of p.vagoes) {
-            if ((v.nfRetorno||'').trim() === String(row.nfNum).trim()) {
-              const dataFmt = p.data ? fmtDate(p.data) : '?';
-              row.status    = `❌ NF ${row.nfNum} já lançada — Data ${dataFmt} · Pedido ${p.pedido}`;
-              row.vagaoIdx  = -1;
-              row.duplicate = true;
-              break;
-            }
-          }
-          if (row.duplicate) break;
-        }
-        // Também verifica duplicata dentro do próprio lote atual
-        if (!row.duplicate) {
-          const jaNoLote = _btResults.find(r => r.nfNum && String(r.nfNum) === String(row.nfNum));
-          if (jaNoLote) {
-            row.status   = `❌ NF ${row.nfNum} duplicada neste lote (já consta em outro arquivo)`;
-            row.vagaoIdx = -1;
-            row.duplicate = true;
-          }
-        }
-      }
-
-      // ── MATCHING — só executa se não for duplicata ──
-      if (!row.duplicate) {
-
-      // Prioridade 1: Vagão já registrado (placa bate exatamente)
-      if (row.vagaoNum) {
-        const norm = row.vagaoNum.toUpperCase();
-        for (const p of allProgs) {
-          const vi = p.vagoes.findIndex(v =>
-            (v.vagao||'').replace(/[\s\-]/g,'').toUpperCase() === norm
-          );
-          if (vi >= 0) {
-            const slotKey = `${p.id}_${vi}`;
-            if (!_usedSlots[slotKey]) {
-              _usedSlots[slotKey] = true;
-              row.progId = p.id; row.vagaoIdx = vi;
-              row.status = `✅ Vagão ${row.vagaoNum} → Ped.${p.pedido} Vg.${vi+1}`;
-            } else {
-              row.status = `⚠️ Vagão ${row.vagaoNum} já alocado neste lote`;
-            }
-            break;
-          }
-        }
-      }
-
-      // Prioridade 2: Pedido identificado → próximo slot livre deste pedido
-      if (row.vagaoIdx < 0 && row.pedidoNF) {
-        let found = false;
-        for (const p of allProgs) {
-          if (String(p.pedido).trim() !== String(row.pedidoNF).trim()) continue;
-          found = true;
-          // Próximo vagão sem NF E não alocado neste lote
-          let allocated = false;
-          for (let vi = 0; vi < p.vagoes.length; vi++) {
-            const v       = p.vagoes[vi];
-            const slotKey = `${p.id}_${vi}`;
-            if (!(v.nfRetorno||'').trim() && !_usedSlots[slotKey]) {
-              _usedSlots[slotKey] = true;
-              row.progId = p.id; row.vagaoIdx = vi;
-              row.status = `✅ Ped.${p.pedido} → Vagão ${vi+1}`;
-              allocated  = true;
-              break;
-            }
-          }
-          if (!allocated) {
-            // Todos os vagões deste pedido já têm NF ou foram alocados neste lote
-            const total    = p.vagoes.length;
-            const comNf    = p.vagoes.filter(v => (v.nfRetorno||'').trim()).length;
-            const alocados = Object.keys(_usedSlots).filter(k => k.startsWith(p.id+'_')).length;
-            row.status = `❌ Excesso! Ped.${p.pedido} tem ${total} vagões, ${comNf} com NF, ${alocados} alocados neste lote`;
-          }
-          break;
-        }
-        if (!found) {
-          row.status = `⚠️ Pedido ${row.pedidoNF} não encontrado neste terminal`;
-        }
-      }
-
-      // Sem match algum
-      if (row.vagaoIdx < 0 && !row.status.startsWith('⚠️') && !row.status.startsWith('❌')) {
-        row.progId = _btProgIds[0];
-        row.status = row.vagaoNum
-          ? `⚠️ Vagão ${row.vagaoNum} não encontrado`
-          : '❌ Pedido/Vagão não identificado na NF';
-      }
-
-      } // end if (!row.duplicate)
-
-    } catch(e) {
-      row.status = '❌ Erro ao ler PDF';
-    }
-
-    _btResults.push(row);
-  }
-
-  // Render results
-  statusEl.style.display  = 'none';
-  resultsEl.style.display = 'block';
-
-  bodyEl.innerHTML = _btResults.map((r, i) => `
-    <tr style="border-bottom:1px solid #edf0f8;${r.vagaoIdx>=0?'background:#f0fdf4':''}">
-      <td style="padding:6px 10px;font-size:10px;color:var(--text-muted);">${r.file.name.replace(/\.pdf$/i,'').substring(0,25)}</td>
-      <td style="padding:6px 10px;font-weight:600;">${r.vagaoNum||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">${r.nfNum||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">${r.volume||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">${r.lacre||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">${r.pedidoNF||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">
-        ${r.vagaoIdx>=0
-          ? `<span style="color:var(--green);font-weight:700;font-size:11px;">${r.status}</span>`
-          : `<span style="color:${r.status.startsWith('❌')? '#b91c1c':'#92400e'};font-weight:700;font-size:11px;">${r.status}</span>
-             <select onchange="btManualSelect(${i},this.value)" style="margin-top:4px;font-size:10px;display:block;width:100%;padding:2px;">
-               <option value="">Alocar manualmente...</option>
-               ${btGetSelectOptions(i)}
-             </select>`
-        }
-      </td>
-    </tr>`).join('');
-
-  const matched   = _btResults.filter(r => r.vagaoIdx >= 0).length;
-  const overflow  = _btResults.filter(r => r.status.startsWith('❌') && !r.duplicate).length;
-  const dupes     = _btResults.filter(r => r.duplicate).length;
-  const warn      = _btResults.filter(r => r.status.startsWith('⚠️')).length;
-  let summary     = `<strong>${matched}</strong> de <strong>${_btResults.length}</strong> NFs vinculadas. `;
-  if (dupes    > 0) summary += `<span style="color:#b91c1c;font-weight:700;">❌ ${dupes} já existem no sistema.</span> `;
-  if (overflow > 0) summary += `<span style="color:#b91c1c;font-weight:700;">❌ ${overflow} excedem vagões disponíveis.</span> `;
-  if (warn     > 0) summary += `<span style="color:#92400e;">⚠️ ${warn} não identificadas.</span> `;
-  if (matched === _btResults.length) summary += `<span style="color:var(--green);">✅ Tudo pronto!</span>`;
-  document.getElementById('bt-summary').innerHTML = summary;
-
-  document.getElementById('bt-apply-btn').disabled = matched === 0;
-}
-
-function btGetSelectOptions(idx) {
-  const r = _btResults[idx];
-  const cnpj = r ? r.cnpjDest : null;
-  let progs = ProgAPI.list().filter(p => _btProgIds.includes(p.id));
-  let filt = cnpj ? progs.filter(p => {
-    const e = Object.entries(FILIAL_CNPJ).find(([u]) =>
-      (p.usina||'').toUpperCase().includes((u.split('/')[1]||u).trim().toUpperCase()));
-    return e ? e[1] === cnpj : false;
-  }) : [];
-  if (!filt.length) filt = progs;
-  const ok = cnpj && filt.length < progs.length;
-  let opts = ok
-    ? '<option value="" disabled style="color:#0369a1;font-weight:700;">Filtrado por CNPJ</option>'
-    : '<option value="" disabled style="color:#92400e;">CNPJ nao identificado - verifique a usina</option>';
-  for (const p of filt) {
-    const ul = (p.usina||'').split('/').pop().trim();
-    opts += '<optgroup label="Ped.' + p.pedido + ' - ' + ul + ' (' + p.qtd + ' vag.)">';
-    p.vagoes.forEach((v, vi) => {
-      const nf = (v.nfRetorno||'').trim();
-      opts += '<option value="' + p.id + '|' + vi + '"' + (nf?' style="color:#aaa"':'') + '>'
-            + 'Vagao ' + (vi+1) + (v.vagao?' - '+v.vagao:' (vazio)') + (nf?' [ja tem NF]':'')
-            + '</option>';
-    });
-    opts += '</optgroup>';
-  }
-  return opts;
-}
-
-function btManualSelect(idx, value) {
-  if (!value || value==='-1') return;
-  const parts = value.split('|');
-  _btResults[idx].progId   = parts[0];
-  _btResults[idx].vagaoIdx = parseInt(parts[1]);
-  _btResults[idx].status   = '✅ Selecionado manualmente';
-  document.getElementById('bt-apply-btn').disabled = !_btResults.some(r=>r.vagaoIdx>=0);
-}
-
-async function applyBatchTerminal() {
-  const toApply = _btResults.filter(r => r.vagaoIdx >= 0);
-  if (!toApply.length) { toast('Nenhuma NF vinculada.', true); return; }
-
-  showLoading(`Aplicando ${toApply.length} NF(s)...`);
+  const toApply = _nlResults.filter(r => r.vagaoIdx >= 0);
+  if (!toApply.length) { toast('Nenhum item vinculado.', true); return; }
+  showLoading('Aplicando ' + toApply.length + ' item(ns)...');
   try {
     const at = fmtDateTime();
     for (const r of toApply) {
-      const prog = ProgAPI.list().find(p => p.id === (r.progId || _btProgIds[0]));
-      if (!prog) continue;
       const v = prog.vagoes[r.vagaoIdx];
       if (!v) continue;
-
       const updates = {};
-      if (r.vagaoNum && !v.vagao)      { v.vagao = r.vagaoNum; updates.vagao = r.vagaoNum; }
-      if (r.nfNum && !v.nfRetorno)     { v.nfRetorno = r.nfNum; updates.nfRetorno = r.nfNum; }
-      if (r.volume && !v.volume)       { v.volume = r.volume; updates.volume = r.volume; }
-      if (r.lacre && !v.lacre)         { v.lacre = r.lacre; updates.lacre = r.lacre; }
-      if (r._file) {
-        v.nfRetornoFile = r._file.name;
-        v.nfRetornoAt   = at;
-        v.nfRetornoFileObj = r._file;
-        updates.nfRetornoFile = r._file.name;
-        updates.nfRetornoAt   = at;
-        // Save PDF to Firestore
+      if (r.type === 'nf') {
+        if (r.nf)   { v.nfInpasa = r.nf; updates.nfInpasa = r.nf; }
+        if (r.lacre && !v.lacre) { v.lacre = r.lacre; updates.lacre = r.lacre; }
+        v.nfInpasaFile = r.file.name; v.nfInpasaAt = at; v.nfInpasaFileObj = r.file;
+        updates.nfInpasaFile = r.file.name; updates.nfInpasaAt = at;
         if (v.vid) {
           try {
             const reader = new FileReader();
-            const b64 = await new Promise((res, rej) => {
-              reader.onload  = () => res(reader.result.split(',')[1]);
-              reader.onerror = () => rej(new Error('read error'));
-              reader.readAsDataURL(r._file);
-            });
-            await db.collection('programacoes').doc(r.progId||_btProgIds[0])
-              .collection('vagoes').doc(v.vid)
-              .collection('pdfData').doc('retorno')
-              .set({ data: b64, fileName: r._file.name, sizeBytes: r._file.size, uploadedAt: at });
-          } catch(e) { console.warn('pdfData save:', e); }
+            const b64 = await new Promise((res,rej) => { reader.onload=()=>res(reader.result.split(',')[1]); reader.onerror=()=>rej(new Error('err')); reader.readAsDataURL(r.file); });
+            await db.collection('programacoes').doc(_nlProgId).collection('vagoes').doc(v.vid).collection('pdfData').doc('inpasa').set({ data: b64, fileName: r.file.name, sizeBytes: r.file.size, uploadedAt: at });
+          } catch(e) { console.warn('pdfData NF Inpasa:', e); }
+        }
+      } else {
+        if (r.volume && !v.volume) { v.volume = r.volume; updates.volume = r.volume; }
+        if (r.lacre  && !v.lacre)  { v.lacre  = r.lacre;  updates.lacre  = r.lacre;  }
+        v.laudoFile = r.file.name; v.laudoAt = at; v.laudoFileObj = r.file;
+        updates.laudoFile = r.file.name; updates.laudoAt = at;
+        if (v.vid) {
+          try {
+            const reader = new FileReader();
+            const b64 = await new Promise((res,rej) => { reader.onload=()=>res(reader.result.split(',')[1]); reader.onerror=()=>rej(new Error('err')); reader.readAsDataURL(r.file); });
+            await db.collection('programacoes').doc(_nlProgId).collection('vagoes').doc(v.vid).collection('pdfData').doc('laudo').set({ data: b64, fileName: r.file.name, sizeBytes: r.file.size, uploadedAt: at });
+          } catch(e) { console.warn('pdfData Laudo:', e); }
         }
       }
-      if (v.vid && Object.keys(updates).length) {
-        await ProgAPI.updateVagao(r.progId||_btProgIds[0], v.vid, updates);
-      }
+      if (v.vid && Object.keys(updates).length) await ProgAPI.updateVagao(_nlProgId, v.vid, updates);
     }
-    closeModal('modal-batch-terminal');
+    closeModal('modal-nf-laudo');
     renderTable();
-    toast(`✅ ${toApply.length} NF(s) aplicadas com sucesso!`);
+    toast('✅ ' + toApply.length + ' item(ns) aplicado(s)!');
   } catch(e) {
-    console.error('applyBatchTerminal:', e);
+    console.error('applyNfLaudo:', e);
     toast('Erro: ' + e.message, true);
   } finally { hideLoading(); }
 }
 
-// ══════════════════════════════════════════
-// PREVISÃO DE VAGÕES
-// ══════════════════════════════════════════
-const DB_PREVISAO = { items: [], _nextId: 1 };
-
-const PrevisaoAPI = {
-  list() { return DB_PREVISAO.items; },
-  async loadAll() {
-    try {
-      const snap = await db.collection('previsaoVagoes').orderBy('data','asc').get();
-      DB_PREVISAO.items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch(e) { console.error('PrevisaoAPI.loadAll:', e); }
-    return DB_PREVISAO.items;
-  },
-  async save(data) {
-    if (data.id) {
-      await db.collection('previsaoVagoes').doc(data.id).update(data);
-    } else {
-      const ref = await db.collection('previsaoVagoes').add(data);
-      data.id = ref.id;
-    }
-    await this.loadAll();
-  },
-  async delete(id) {
-    await db.collection('previsaoVagoes').doc(id).delete();
-    await this.loadAll();
-  }
-};
-
-let editingPrevisaoId = null;
-let deletingPrevisaoId = null;
-
-function openPrevisaoModal(id = null) {
-  editingPrevisaoId = id;
-  document.getElementById('modal-previsao-title').textContent = id ? 'Editar Previsão' : 'Nova Previsão';
-  document.getElementById('pv-id').value = id || '';
-
-  // Populate terminal select
-  const pvT = document.getElementById('pv-terminal');
-  pvT.innerHTML = '<option value="">Selecione o terminal...</option>' +
-    DB.customProfiles.filter(p=>p.baseRole==='terminal')
-      .map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
-
-  if (id) {
-    const pv = PrevisaoAPI.list().find(x => x.id === id);
-    if (pv) {
-      document.getElementById('pv-data').value    = pv.data || '';
-      document.getElementById('pv-encoste').value = pv.encoste || '';
-      document.getElementById('pv-hora').value    = pv.hora || '';
-      document.getElementById('pv-qtd').value     = pv.qtd || '';
-      document.getElementById('pv-terminal').value= pv.terminal || '';
-    }
-  } else {
-    ['pv-data','pv-hora','pv-qtd'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('pv-encoste').selectedIndex  = 0;
-    document.getElementById('pv-terminal').selectedIndex = 0;
-  }
-  openModal('modal-previsao');
-}
-
-async function savePrevisao() {
-  const id       = document.getElementById('pv-id').value;
-  const data     = document.getElementById('pv-data').value;
-  const encoste  = document.getElementById('pv-encoste').value;
-  const hora     = document.getElementById('pv-hora').value;
-  const qtd      = parseInt(document.getElementById('pv-qtd').value);
-  const terminal = document.getElementById('pv-terminal').value;
-
-  if (!data || !encoste || !hora || !qtd || !terminal) { toast('Preencha todos os campos.', true); return; }
-
-  showLoading('Salvando previsão...');
-  try {
-    const payload = {
-      data, encoste, hora, qtd, terminal,
-      lancadoEm: fmtDateTime(),
-      lancadoPor: currentUser.nome || currentUser.email,
-      updatedAt: fmtDateTime(),
-    };
-    if (id) payload.id = id;
-    await PrevisaoAPI.save(payload);
-    closeModal('modal-previsao');
-    renderPrevisao();
-    toast('Previsão salva com sucesso.');
-  } catch(e) { toast('Erro: ' + e.message, true); }
-  finally { hideLoading(); }
-}
-
-function openDeletePrevisao(id) {
-  deletingPrevisaoId = id;
-  openModal('modal-del-previsao');
-}
-
-async function confirmDeletePrevisao() {
-  showLoading('Excluindo...');
-  try {
-    await PrevisaoAPI.delete(deletingPrevisaoId);
-    closeModal('modal-del-previsao');
-    renderPrevisao();
-    toast('Previsão excluída.');
-  } catch(e) { toast('Erro: ' + e.message, true); }
-  finally { hideLoading(); deletingPrevisaoId = null; }
-}
-
-const _pvGroupState = {};
-function togglePvGroup(key) { _pvGroupState[key] = !_pvGroupState[key]; renderPrevisao(); }
-
-function clearPrevisaoFilter() {
-  const de  = document.getElementById('pv-filter-de');
-  const ate = document.getElementById('pv-filter-ate');
-  if (de)  de.value  = '';
-  if (ate) ate.value = '';
-  renderPrevisao();
-}
-
-function renderPrevisao() {
-  const tbody = document.getElementById('previsao-body');
-  if (!tbody) return;
-  let items = PrevisaoAPI.list();
-
-  // Filter by terminal for terminal users
-  if (!can('canSeeAll') && can('canViewPrevisao')) {
-    const userTerminal = (currentUser.terminalName || '').toLowerCase().trim();
-    if (userTerminal) items = items.filter(pv => (pv.terminal||'').toLowerCase().trim() === userTerminal);
-  }
-
-  // Date filter
-  const de  = document.getElementById('pv-filter-de')?.value  || '';
-  const ate = document.getElementById('pv-filter-ate')?.value || '';
-  if (de)  items = items.filter(pv => (pv.data||'') >= de);
-  if (ate) items = items.filter(pv => (pv.data||'') <= ate);
-
-  if (!items.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma previsão cadastrada.</td></tr>';
-    return;
-  }
-
-  // Group: date → terminal → [items]
-  const byDate = {};
-  for (const pv of items) {
-    const d = pv.data || '9999-12-31';
-    const t = pv.terminal || '(Sem terminal)';
-    if (!byDate[d]) byDate[d] = {};
-    if (!byDate[d][t]) byDate[d][t] = [];
-    byDate[d][t].push(pv);
-  }
-
-  const canEdit = can('canEditPrevisao');
-  const COLS    = 5;
-  let html      = '';
-
-  for (const date of Object.keys(byDate).sort()) {
-    const dk          = `pv_date_${date}`;
-    const dateCollapsed = !!_pvGroupState[dk];
-    const dateArrow   = dateCollapsed ? '▶' : '▼';
-    const terminals   = byDate[date];
-    const totalItems  = Object.values(terminals).flat().length;
-    const totalVagoes = Object.values(terminals).flat().reduce((s,pv) => s+(parseInt(pv.qtd)||0), 0);
-
-    html += `<tr class="row-group-date" onclick="togglePvGroup('${dk}')">
-      <td colspan="${COLS}" style="padding:9px 12px;">
-        <span style="margin-right:8px;">${dateArrow}</span>
-        📅 ${fmtDate(date)}
-        <span style="margin-left:16px;font-size:11px;font-weight:400;opacity:.8;">
-          ${Object.keys(terminals).length} terminal(is) · ${totalItems} previsão(ões) · ${totalVagoes} vagões
-        </span>
-      </td>
-    </tr>`;
-
-    if (dateCollapsed) continue;
-
-    for (const termName of Object.keys(terminals).sort()) {
-      const tk           = `pv_term_${date}_${termName}`;
-      const termCollapsed = !!_pvGroupState[tk];
-      const termArrow    = termCollapsed ? '▶' : '▼';
-      const termItems    = terminals[termName];
-      const termVagoes   = termItems.reduce((s,pv) => s+(parseInt(pv.qtd)||0), 0);
-
-      html += `<tr class="row-group-terminal" onclick="togglePvGroup('${tk}')">
-        <td colspan="${COLS}" style="padding:7px 12px 7px 28px;">
-          <span style="margin-right:8px;">${termArrow}</span>
-          🚉 <span class="terminal-badge" style="margin:0 8px;">${esc(termName)}</span>
-          <span style="font-size:11px;font-weight:400;color:#4a5580;">${termItems.length} previsão(ões) · ${termVagoes} vagões</span>
-        </td>
-      </tr>`;
-
-      if (termCollapsed) continue;
-
-      for (const pv of termItems) {
-        html += `<tr style="border-bottom:1px solid #edf0f8;">
-          <td style="padding:8px 10px 8px 44px;">
-            <span style="background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;">${esc(pv.encoste||'')}</span>
-          </td>
-          <td style="padding:8px 10px;">${esc(pv.hora||'')}</td>
-          <td style="padding:8px 10px;text-align:center;font-weight:700;">${pv.qtd||''}</td>
-          <td style="padding:8px 10px;font-size:11px;color:var(--text-muted);">
-            ${esc(pv.lancadoEm||'')}
-            ${pv.updatedAt && pv.updatedAt !== pv.lancadoEm
-              ? `<br><span style="color:#7c3aed;">Editado: ${esc(pv.updatedAt)}</span>` : ''}
-          </td>
-          <td style="padding:8px 10px;">
-            ${canEdit
-              ? `<div class="action-icons">
-                   <button class="icon-btn" onclick="openPrevisaoModal('${pv.id}')" title="Editar">✏️</button>
-                   <button class="icon-btn del" onclick="openDeletePrevisao('${pv.id}')" title="Excluir">🗑️</button>
-                 </div>`
-              : '<span style="font-size:10px;color:var(--text-muted);">Somente leitura</span>'}
-          </td>
-        </tr>`;
-      }
-    }
-  }
-  tbody.innerHTML = html;
-}
-
-// ══════════════════════════════════════════
-// ENVIAR PARA FATURAMENTO (Cloud Function + SendGrid)
-// ══════════════════════════════════════════
-async function enviarFaturamento(progId, vagaoIdx) {
-  const prog = ProgAPI.list().find(p => p.id === progId);
-  if (!prog) return;
-  const v = prog.vagoes[vagaoIdx];
-  if (!v || !v.nfRetornoFile) { toast('Anexe o PDF da NF de Retorno antes de enviar.', true); return; }
-
-  // Show alert instructing user to attach PDF manually
-  const ok = confirm(
-    '📎 ADICIONE O PDF DA NF A SER FATURADA NO E-MAIL QUE SERÁ ABERTO\n\n' +
-    'Arquivo: ' + (v.nfRetornoFile || 'NF_Retorno.pdf') + '\n\n' +
-    'Clique em OK para abrir o e-mail.'
-  );
-  if (!ok) return;
-
-  const dataAtual = fmtDateTime();
-  const to        = 'atendimento.externo@inpasa.com.br;csc.faturamento@inpasa.com.br;csc@elosinpasa.com.br;rafael.mulato@inpasa.com.br;kemelyn.penha@inpasa.com.br';
-  const subject   = encodeURIComponent(
-    `FATURAMENTO FERROVIÁRIO - VAGÃO ${v.vagao||'?'} - TERMINAL ${prog.terminal||'?'} - DATA ${fmtDate(prog.data)}`
-  );
-  const body = encodeURIComponent(
-`SOLICITAÇÃO DE FATURAMENTO FERROVIÁRIO
-
-Pedido:        ${prog.pedido}
-Produto:       ${prog.produto}
-Usina / Filial:${prog.usina}
-Cliente:       ${prog.cliente}
-Local Entrega: ${prog.local}
-Terminal:      ${prog.terminal || '—'}
-Data Prog.:    ${fmtDate(prog.data)}
-Encoste:       ${prog.encoste || '—'}
-
-DADOS DO VAGÃO:
-Vagão Nº:      ${v.vagao    || '—'}
-NF de Retorno: ${v.nfRetorno|| '—'}
-Volume (L):    ${v.volume   || '—'}
-Lacre:         ${v.lacre    || '—'}
-
-Data/Hora:     ${dataAtual}
-
-ANEXO: ${v.nfRetornoFile || ''}
-
----
-Enviado pelo Sistema de Programações Ferroviárias Inpasa.`
-  );
-
-  window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
-
-  // Mark as sent after short delay
-  setTimeout(async () => {
-    v.enviadoFaturamentoAt = dataAtual;
-    if (v.vid) {
-      try { await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: dataAtual }); }
-      catch(e) { console.warn('updateVagao:', e); }
-    }
-    renderTable();
-    toast('✈ E-mail aberto! Vagão marcado como enviado.');
-  }, 1500);
-}
-
-// ══════════════════════════════════════════
-// REENVIAR PARA FATURAMENTO
-// ══════════════════════════════════════════
-async function reenviarFaturamento(progId, vagaoIdx) {
-  const confirmed = confirm('Enviar novamente para faturamento?\n\nUm novo e-mail será gerado com os dados atuais do vagão.');
-  if (!confirmed) return;
-  // Reset the sent status so enviarFaturamento runs fresh
-  const prog = ProgAPI.list().find(p => p.id === progId);
-  if (prog) prog.vagoes[vagaoIdx].enviadoFaturamentoAt = null;
-  await enviarFaturamento(progId, vagaoIdx);
-}
 
 // ══════════════════════════════════════════
 // EXPAND / COLLAPSE ALL
