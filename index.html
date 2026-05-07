@@ -4118,8 +4118,14 @@ async function saveNovaProg() {
 let _nlCtx = { progId: null, nfFile: null, laudoFile: null, nfData: null, laudoData: null };
 
 function normalizeSpacedText(text) {
+  // 1) Colapsa dígitos separados por espaço ("1 8 2 4 7 8" → "182478")
   let t = text.replace(/(\d)\s+(?=\d)/g, '$1');
-  t = t.replace(/N\s+[º°o]/gi, 'Nº');
+  // 2) Colapsa letras maiúsculas separadas por 1 espaço (texto char-a-char do pdf.js)
+  //    Faz múltiplas passagens até estabilizar
+  let prev;
+  do { prev = t; t = t.replace(/([A-ZÀÁÂÃÉÊÍÓÔÕÚÜ])\s(?=[A-ZÀÁÂÃÉÊÍÓÔÕÚÜ])/g, '$1'); } while (prev !== t);
+  // 3) Normaliza abreviações frequentes
+  t = t.replace(/N\s*[º°o]\s*\.?\s*/gi, 'Nº ');
   t = t.replace(/S\s*É\s*R\s*I\s*E/gi, 'SÉRIE');
   return t;
 }
@@ -4127,7 +4133,8 @@ function normalizeSpacedText(text) {
 function extractFromCT(text) {
   const t = normalizeSpacedText(text);
   const vagao = (() => {
-    const m = t.match(/Placa[s]?[:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/i);
+    const m = t.match(/PLACA\s*([A-Z]{3})\s*(\d{7})/i) ||
+              t.match(/Placa[s]?[:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/i);
     if (!m) return null;
     const d = m[2].replace(/\D/g,'');
     return d.length === 7 ? m[1].toUpperCase() + d : null;
@@ -4135,7 +4142,7 @@ function extractFromCT(text) {
   const lacre  = (t.match(/Lacre[s]?[:\s]+(\d{4,10})/i)||[])[1] || null;
   const nf = (() => {
     const m = t.match(/Nota\(s\)\s*Fiscal\(is\)[:\s]*(\d+)/i) ||
-              t.match(/N[º°o]\.?\s*(0*\d{5,9})\s+S[ÉE]RIE/i);
+              t.match(/Nº\s*\.?\s*(0*\d{5,9})\s*SÉRIE/i);
     return m ? m[1].replace(/^0+/,'') : null;
   })();
   const volume = (() => {
@@ -4150,17 +4157,22 @@ function extractFromCT(text) {
 function extractFromNfInpasa(text) {
   const t = normalizeSpacedText(text);
   const nf = (() => {
-    const m = t.match(/N[º°o]\.?\s*(0*\d{5,9})\s+S[ÉE]RIE/i) ||
-              t.match(/N[º°o]\.?\s*[\n]?\s*(0*\d{5,9})/i);
+    const m = t.match(/Nº\s*\.?\s*(0*\d{5,9})\s*SÉRIE/i) ||
+              t.match(/Nº\s*\.?\s*(0*\d{5,9})/i);
     return m ? m[1].replace(/\./g,'').replace(/^0+/,'') : null;
   })();
   const vagao = (() => {
-    const m = t.match(/PLAC[AO][:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/i);
+    const m = t.match(/PLACA\s*([A-Z]{3})\s*(\d{7})/i) ||
+              t.match(/PLAC[AO][:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/i);
     if (!m) return null;
     const d = m[2].replace(/\D/g,'');
     return d.length === 7 ? m[1].toUpperCase() + d : null;
   })();
-  const lacre = (t.match(/LACRE\(?S?\)?[:\s]+([\d\s]+\d)/i)||[])[1]?.replace(/\s/g,'') || null;
+  const lacre = (() => {
+    const m = t.match(/LACRE\(?S?\)?\s*[:\s]+(\d{3,6})/i) ||
+              t.match(/LACRE\(?S?\)?\s*[:\s]+([\d\s]+\d)/i);
+    return m ? m[1].replace(/\s/g,'') : null;
+  })();
   return { nf, vagao, lacre };
 }
 
