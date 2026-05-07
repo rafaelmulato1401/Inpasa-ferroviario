@@ -4129,6 +4129,7 @@ function findVagaoByPlate(prog, vagaoStr) {
 // NF + LAUDO INPASA — LOTE
 // ══════════════════════════════════════════
 let _nlProgId    = null;
+let _nlAllProgs  = [];   // todos os pedidos do mesmo terminal+data
 let _nlNfFiles   = [];
 let _nlLaudoFiles= [];
 let _nlResults   = [];
@@ -4138,6 +4139,17 @@ function openNfLaudoModal(progId) {
   _nlNfFiles     = [];
   _nlLaudoFiles  = [];
   _nlResults     = [];
+
+  // Coleta TODOS os pedidos do mesmo terminal + data para vinculação multi-pedido
+  const origem = ProgAPI.list().find(p => p.id === progId);
+  if (origem) {
+    _nlAllProgs = ProgAPI.list().filter(p =>
+      p.terminal === origem.terminal && p.data === origem.data
+    );
+  } else {
+    _nlAllProgs = origem ? [origem] : [];
+  }
+
   document.getElementById('nl-nf-count').textContent    = '';
   document.getElementById('nl-laudo-count').textContent = '';
   document.getElementById('nl-status').style.display    = 'none';
@@ -4163,8 +4175,13 @@ function nlHandleDrop(e, type) {
 }
 
 async function nlProcessAll() {
-  const prog = ProgAPI.list().find(p => p.id === _nlProgId);
-  if (!prog) return;
+  // Usa _nlAllProgs (todos os pedidos do mesmo terminal+data) para cruzamento multi-pedido.
+  // Garante fallback para o progId original se _nlAllProgs não estiver populado.
+  const progsToSearch = _nlAllProgs.length > 0
+    ? _nlAllProgs
+    : [ProgAPI.list().find(p => p.id === _nlProgId)].filter(Boolean);
+  if (!progsToSearch.length) return;
+
   const allFiles = [
     ..._nlNfFiles.map(f    => ({ file: f, type: 'nf' })),
     ..._nlLaudoFiles.map(f => ({ file: f, type: 'laudo' })),
@@ -4180,18 +4197,24 @@ async function nlProcessAll() {
   totalEl.textContent     = allFiles.length;
   progressEl.textContent  = '0';
   barEl.style.width       = '0%';
+
+  // Slots usados: chave = "progId_vagaoIdx"
   const _usedNfSlots    = {};
   const _usedLaudoSlots = {};
+
   for (let i = 0; i < allFiles.length; i++) {
     const { file, type } = allFiles[i];
     progressEl.textContent = i + 1;
     barEl.style.width = Math.round(((i+1)/allFiles.length)*100) + '%';
-    const row = { file, type, nf: null, vagao: null, lacre: null, volume: null, vagaoIdx: -1, status: '❌ Não identificado' };
+    // row agora inclui progId para saber em qual pedido salvar
+    const row = { file, type, nf: null, vagao: null, lacre: null, volume: null,
+                  vagaoIdx: -1, progId: _nlProgId, status: '❌ Não identificado' };
     try {
       const text = await extractPdfText(file);
       if (type === 'nf') {
         const data = extractFromNfInpasa(text);
         row.nf = data.nf; row.vagao = data.vagao; row.lacre = data.lacre;
+        // Checagem de duplicata em TODOS os pedidos do sistema
         if (row.nf) {
           let dup = false;
           for (const p of ProgAPI.list()) {
@@ -4209,42 +4232,59 @@ async function nlProcessAll() {
           }
         }
         if (!row.duplicate) {
+          // 1º: Tenta por placa em TODOS os pedidos do terminal/data
           if (row.vagao) {
-            const vi = findVagaoByPlate(prog, row.vagao);
-            const sk = prog.id + '_' + vi;
-            if (vi >= 0 && !_usedNfSlots[sk]) {
-              _usedNfSlots[sk] = true; row.vagaoIdx = vi;
-              row.status = '✅ Vagão ' + row.vagao + ' → Vg.' + (vi+1);
+            for (const p of progsToSearch) {
+              const vi = findVagaoByPlate(p, row.vagao);
+              const sk = p.id + '_' + vi;
+              if (vi >= 0 && !_usedNfSlots[sk]) {
+                _usedNfSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
+                row.status = '✅ Vagão ' + row.vagao + ' → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vg.' + (vi+1);
+                break;
+              }
             }
           }
+          // 2º: Fallback sequencial — primeiro slot NF vazio em qualquer pedido do terminal
           if (row.vagaoIdx < 0) {
-            for (let vi = 0; vi < prog.vagoes.length; vi++) {
-              const sk = prog.id + '_' + vi;
-              if (!(prog.vagoes[vi].nfInpasa||'').trim() && !_usedNfSlots[sk]) {
-                _usedNfSlots[sk] = true; row.vagaoIdx = vi;
-                row.status = '✅ → Vagão ' + (vi+1); break;
+            outer_nf: for (const p of progsToSearch) {
+              for (let vi = 0; vi < p.vagoes.length; vi++) {
+                const sk = p.id + '_' + vi;
+                if (!(p.vagoes[vi].nfInpasa||'').trim() && !_usedNfSlots[sk]) {
+                  _usedNfSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
+                  row.status = '✅ → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vagão ' + (vi+1);
+                  break outer_nf;
+                }
               }
             }
           }
           if (row.vagaoIdx < 0) row.status = '❌ Sem vagão disponível para NF Inpasa';
         }
       } else {
+        // Laudo CQ
         const data = extractFromCT(text);
         row.nf = data.nf; row.vagao = data.vagao; row.lacre = data.lacre; row.volume = data.volume;
+        // 1º: Tenta por placa em TODOS os pedidos do terminal/data
         if (row.vagao) {
-          const vi = findVagaoByPlate(prog, row.vagao);
-          const sk = prog.id + '_' + vi;
-          if (vi >= 0 && !_usedLaudoSlots[sk]) {
-            _usedLaudoSlots[sk] = true; row.vagaoIdx = vi;
-            row.status = '✅ Vagão ' + row.vagao + ' → Vg.' + (vi+1);
+          for (const p of progsToSearch) {
+            const vi = findVagaoByPlate(p, row.vagao);
+            const sk = p.id + '_' + vi;
+            if (vi >= 0 && !_usedLaudoSlots[sk]) {
+              _usedLaudoSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
+              row.status = '✅ Vagão ' + row.vagao + ' → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vg.' + (vi+1);
+              break;
+            }
           }
         }
+        // 2º: Fallback sequencial — primeiro slot laudo vazio
         if (row.vagaoIdx < 0) {
-          for (let vi = 0; vi < prog.vagoes.length; vi++) {
-            const sk = prog.id + '_' + vi;
-            if (!prog.vagoes[vi].laudoFile && !_usedLaudoSlots[sk]) {
-              _usedLaudoSlots[sk] = true; row.vagaoIdx = vi;
-              row.status = '✅ → Vagão ' + (vi+1); break;
+          outer_laudo: for (const p of progsToSearch) {
+            for (let vi = 0; vi < p.vagoes.length; vi++) {
+              const sk = p.id + '_' + vi;
+              if (!p.vagoes[vi].laudoFile && !_usedLaudoSlots[sk]) {
+                _usedLaudoSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
+                row.status = '✅ → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vagão ' + (vi+1);
+                break outer_laudo;
+              }
             }
           }
         }
@@ -4269,8 +4309,10 @@ async function nlProcessAll() {
         : '<span style="color:#b91c1c;font-weight:700;font-size:11px;">' + r.status + '</span>' +
           (!r.duplicate ? '<select onchange="nlManualSelect(' + i + ',this.value)" style="margin-top:4px;font-size:10px;display:block;width:100%;padding:2px;">' +
             '<option value="">Selecionar vagão...</option>' +
-            (ProgAPI.list().find(p=>p.id===_nlProgId)?.vagoes||[]).map((v,vi) =>
-              '<option value="' + vi + '">Vagão ' + (vi+1) + (v.vagao?' ('+v.vagao+')':'') + '</option>'
+            (_nlAllProgs.length > 0 ? _nlAllProgs : [ProgAPI.list().find(p=>p.id===_nlProgId)].filter(Boolean)).flatMap((p) =>
+              (p.vagoes||[]).map((v,vi) =>
+                '<option value="' + p.id + '__' + vi + '">Ped.' + (p.pedido||p.id.slice(-4)) + ' Vagão ' + (vi+1) + (v.vagao?' ('+v.vagao+')':'') + '</option>'
+              )
             ).join('') +
           '</select>' : '')
       ) +
@@ -4289,20 +4331,30 @@ async function nlProcessAll() {
 
 function nlManualSelect(idx, value) {
   if (!value) return;
-  _nlResults[idx].vagaoIdx = parseInt(value);
-  _nlResults[idx].status   = '✅ Selecionado manualmente';
+  // value pode ser "progId__vi" (novo formato multi-pedido) ou só "vi" (legado)
+  if (value.includes('__')) {
+    const [pid, vi] = value.split('__');
+    _nlResults[idx].progId   = pid;
+    _nlResults[idx].vagaoIdx = parseInt(vi);
+  } else {
+    _nlResults[idx].vagaoIdx = parseInt(value);
+    _nlResults[idx].progId   = _nlProgId;
+  }
+  _nlResults[idx].status = '✅ Selecionado manualmente';
   document.getElementById('nl-apply-btn').disabled = !_nlResults.some(r=>r.vagaoIdx>=0);
 }
 
 async function applyNfLaudo() {
-  const prog = ProgAPI.list().find(p => p.id === _nlProgId);
-  if (!prog) return;
   const toApply = _nlResults.filter(r => r.vagaoIdx >= 0);
   if (!toApply.length) { toast('Nenhum item vinculado.', true); return; }
   showLoading('Aplicando ' + toApply.length + ' item(ns)...');
   try {
     const at = fmtDateTime();
     for (const r of toApply) {
+      // Usa r.progId (pedido correto do vagão) em vez de _nlProgId fixo
+      const targetProgId = r.progId || _nlProgId;
+      const prog = ProgAPI.list().find(p => p.id === targetProgId);
+      if (!prog) continue;
       const v = prog.vagoes[r.vagaoIdx];
       if (!v) continue;
       const updates = {};
@@ -4315,7 +4367,7 @@ async function applyNfLaudo() {
           try {
             const reader = new FileReader();
             const b64 = await new Promise((res,rej) => { reader.onload=()=>res(reader.result.split(',')[1]); reader.onerror=()=>rej(new Error('err')); reader.readAsDataURL(r.file); });
-            await db.collection('programacoes').doc(_nlProgId).collection('vagoes').doc(v.vid).collection('pdfData').doc('inpasa').set({ data: b64, fileName: r.file.name, sizeBytes: r.file.size, uploadedAt: at });
+            await db.collection('programacoes').doc(targetProgId).collection('vagoes').doc(v.vid).collection('pdfData').doc('inpasa').set({ data: b64, fileName: r.file.name, sizeBytes: r.file.size, uploadedAt: at });
           } catch(e) { console.warn('pdfData NF Inpasa:', e); }
         }
       } else {
@@ -4327,11 +4379,11 @@ async function applyNfLaudo() {
           try {
             const reader = new FileReader();
             const b64 = await new Promise((res,rej) => { reader.onload=()=>res(reader.result.split(',')[1]); reader.onerror=()=>rej(new Error('err')); reader.readAsDataURL(r.file); });
-            await db.collection('programacoes').doc(_nlProgId).collection('vagoes').doc(v.vid).collection('pdfData').doc('laudo').set({ data: b64, fileName: r.file.name, sizeBytes: r.file.size, uploadedAt: at });
+            await db.collection('programacoes').doc(targetProgId).collection('vagoes').doc(v.vid).collection('pdfData').doc('laudo').set({ data: b64, fileName: r.file.name, sizeBytes: r.file.size, uploadedAt: at });
           } catch(e) { console.warn('pdfData Laudo:', e); }
         }
       }
-      if (v.vid && Object.keys(updates).length) await ProgAPI.updateVagao(_nlProgId, v.vid, updates);
+      if (v.vid && Object.keys(updates).length) await ProgAPI.updateVagao(targetProgId, v.vid, updates);
     }
     closeModal('modal-nf-laudo');
     renderTable();
