@@ -747,15 +747,14 @@ tbody tr { border-bottom:1px solid #edf0f8; }
                 <th style="width:85px">NF Retorno</th>
                 <th style="width:75px">Volume (L)</th>
                 <th class="hide-mobile" style="width:70px">Lacre</th>
-                <th style="width:85px">NF Inpasa</th>
+                <th style="width:80px">NF Inpasa</th>
                 <th style="width:75px">Laudo</th>
                 <th style="width:115px">Status</th>
-                <th style="width:55px">Ações</th>
-                <th style="width:100px">Fichas Seg.</th>
+                <th style="width:170px">Ações</th>
               </tr>
             </thead>
             <tbody id="table-body">
-              <tr class="empty-row"><td colspan="15">Nenhuma programação cadastrada.</td></tr>
+              <tr class="empty-row"><td colspan="14">Nenhuma programação cadastrada.</td></tr>
             </tbody>
           </table>
         </div>
@@ -2486,7 +2485,7 @@ function renderTable() {
   fc.textContent = (de||ate) ? `${progs.length} de ${all.length} programação(ões)` : `${all.length} programação(ões)`;
 
   if (!progs.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="15">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="14">${all.length ? 'Nenhuma programação no período selecionado.' : 'Nenhuma programação cadastrada.'}</td></tr>`;
     return;
   }
 
@@ -2568,20 +2567,22 @@ function renderTable() {
           <td class="hide-mobile">${esc(p.usina)}</td>
           <td class="hide-mobile">${esc(p.cliente)}</td>
           <td class="hide-mobile">${esc(p.local)}</td>
-          <td colspan="6" style="font-weight:400;color:var(--text-muted);font-size:10px;"><span style="background:#e8eef8;color:#1a3a6b;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-right:8px;">${p.qtd} vag.</span>${p.collapsed?'Clique na seta para expandir':''}</td>
+          <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;"><span style="background:#e8eef8;color:#1a3a6b;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-right:8px;">${p.qtd} vag.</span>${p.collapsed?'Clique na seta para expandir':''}</td>
           <td></td>
           <td>
-            <div class="action-icons">
-              <button class="icon-btn" title="Editar" onclick="openProgModal('${p.id}')" ${(!canEdit||locked)?'disabled':''}>✏️</button>
-              <button class="icon-btn del" title="Excluir" onclick="openDeleteModal('${p.id}')" ${(!canDel||locked)?'disabled':''}>🗑️</button>
-              ${can('canDownload') ? `
-              <button class="icon-btn" title="Exportar Excel" onclick="exportExcelProg('${p.id}')">📊</button>
-              <button class="icon-btn" title="Baixar PDFs" onclick="exportZipProg('${p.id}')">📦</button>` : ''}
-              ${can('canUploadInpasa') ? `
-              <button class="icon-btn" style="font-size:9px;padding:3px 5px;" title="Input NF + Laudo Inpasa — vincula automaticamente ao vagão correspondente" onclick="openNfLaudoModal('${p.id}')">📋</button>` : ''}
+            <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start;padding:2px 0;">
+              <div class="action-icons">
+                <button class="icon-btn" title="Editar" onclick="openProgModal('${p.id}')" ${(!canEdit||locked)?'disabled':''}>✏️</button>
+                <button class="icon-btn del" title="Excluir" onclick="openDeleteModal('${p.id}')" ${(!canDel||locked)?'disabled':''}>🗑️</button>
+                ${can('canDownload') ? `
+                <button class="icon-btn" title="Exportar Excel" onclick="exportExcelProg('${p.id}')">📊</button>
+                <button class="icon-btn" title="Baixar PDFs" onclick="exportZipProg('${p.id}')">📦</button>` : ''}
+                ${can('canUploadInpasa') ? `
+                <button class="icon-btn" style="font-size:9px;padding:3px 5px;" title="Input NF + Laudo Inpasa" onclick="openNfLaudoModal('${p.id}')">📋</button>` : ''}
+              </div>
+              <div style="display:flex;flex-direction:column;gap:3px;">${getFichaButtons(p)}</div>
             </div>
           </td>
-          <td>${getFichaButtons(p)}</td>
         </tr>`;
 
         if (!p.collapsed) {
@@ -2688,8 +2689,7 @@ function renderTable() {
                 </span>
               </div>` : ''}
           </td>
-          <td></td><!-- Ações col empty in vagao row -->
-          <td><!-- Fichas Seg. (per prog, empty on vagão row) --></td>
+          <td></td><!-- Ações+Fichas: vazio na linha de vagão -->
           </tr>`;
           } // end vagao for loop
         } // end if !p.collapsed
@@ -3558,10 +3558,14 @@ const FICHA_MAP = {
 
 function getFichaButtons(prog) {
   const fichas = FICHA_MAP[prog.produto];
-  if (!fichas || !fichas.length) return '<span style="font-size:10px;color:var(--text-muted);">—</span>';
+  if (!fichas || !fichas.length) return '';
   return fichas.map(f => `
     <a href="${FICHA_BASE_URL}${f.file}" target="_blank" download="${f.file}"
-       class="doc-btn has-file" style="text-decoration:none;margin-bottom:2px;display:inline-flex;">
+       style="text-decoration:none;display:inline-flex;align-items:center;gap:3px;
+              background:#ede9f8;color:#6d28d9;border:1px solid #ddd6fe;border-radius:6px;
+              padding:2px 7px;font-size:9px;font-weight:700;white-space:nowrap;cursor:pointer;
+              transition:background .15s;"
+       onmouseover="this.style.background='#ddd6fe'" onmouseout="this.style.background='#ede9f8'">
       📄 ${f.label}
     </a>
   `).join('');
