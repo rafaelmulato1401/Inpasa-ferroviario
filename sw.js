@@ -3,7 +3,7 @@
 // Estratégia: Network First para Firebase, Cache First para assets
 // ══════════════════════════════════════════════════════════════
 
-const CACHE_NAME      = 'inpasa-v1';
+const CACHE_NAME      = 'inpasa-v8';
 const OFFLINE_URL     = '/offline.html';
 
 // Assets que vão para cache na instalação
