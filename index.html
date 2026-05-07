@@ -2892,11 +2892,8 @@ function extractPedido(text) {
 
 
 function extractCnpjDestinatario(text) {
-  // CNPJ da INPASA sempre começa com 29.316.596 ou 29316596
-  // Aparece tanto na Teciap quanto na Ultracargo como CNPJ do destinatário
-  const m = text.match(/29[\.\s]?316[\.\s]?596[\/\.\s]?(\d{4})[-\.\s]?(\d{2})/);
+  const m = text.match(/29[.\s]?316[.\s]?596[\/.\s]?(\d{4})[-.\s]?(\d{2})/);
   if (!m) return null;
-  // Return normalized 14-digit CNPJ
   return '29316596' + m[1] + m[2];
 }
 
@@ -3435,18 +3432,18 @@ async function startRealtimeListeners() {
   }
 
   _unsubProgs = q.onSnapshot(async snap => {
-    // Rebuild programacoes from snapshot — preserve collapsed + vagoes state
+    // Rebuild programacoes from snapshot
     const newProgs = snap.docs.map(d => {
       const existing = DB.programacoes.find(p => p.id === d.id);
       return {
         id: d.id,
-        collapsed: existing ? existing.collapsed : false, // preserve user's expand/collapse
-        vagoes: existing ? existing.vagoes : [],          // preserve loaded vagoes
+        collapsed: existing ? existing.collapsed : false,
+        vagoes: existing ? existing.vagoes : [],
         ...d.data()
       };
     });
 
-    // Load vagoes only for new/changed docs (not for unchanged ones)
+    // Load vagoes only for new/changed docs
     const changed = snap.docChanges().filter(c => c.type !== 'removed');
     await Promise.all(changed.map(async c => {
       const prog = newProgs.find(p => p.id === c.doc.id);
@@ -3474,25 +3471,9 @@ async function startRealtimeListeners() {
     renderTable();
   }, err => console.warn('progs listener error:', err));
 
-  // ── Previsão listener ──
-  _unsubPrevisao = db.collection('previsaoVagoes')
-    .orderBy('data','asc')
-    .onSnapshot(snap => {
-      DB_PREVISAO.items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Only re-render if previsao tab is active
-      if (document.getElementById('tab-previsao-content')?.style.display !== 'none') {
-        renderPrevisao();
-      }
-    }, err => console.warn('previsao listener error:', err));
+  
 
-  console.log('✅ Real-time listeners started');
-}
 
-function stopRealtimeListeners() {
-  if (_unsubProgs)    { _unsubProgs();    _unsubProgs    = null; }
-  if (_unsubPrevisao) { _unsubPrevisao(); _unsubPrevisao = null; }
-  _realtimeActive = false;
-}
 
 // ══════════════════════════════════════════
 // INPUT NOTAS TERMINAL — LOTE
@@ -3589,21 +3570,17 @@ async function processBatchTerminal(files) {
       // ── MATCHING — só executa se não for duplicata ──
       if (!row.duplicate) {
 
-      // Prioridade 1: Vagão já registrado (placa bate exatamente)
-      // Filtra por CNPJ do destinatário se disponível
+      // Prioridade 1: Vagão já registrado — filtrado por CNPJ se disponível
       if (row.vagaoNum) {
         const norm = row.vagaoNum.toUpperCase();
-        const progsParaVagao = row.cnpjDest
-          ? allProgs.filter(p => {
-              const cnpjEntry = Object.entries(FILIAL_CNPJ)
-                .find(([usina]) => (p.usina||'').toUpperCase().includes(
-                  usina.split('/')[1]?.trim().toUpperCase() || usina.toUpperCase()
-                ));
-              return cnpjEntry ? cnpjEntry[1] === row.cnpjDest : true;
-            })
+        const _progsV = row.cnpjDest
+          ? (allProgs.filter(p => {
+              const e = Object.entries(FILIAL_CNPJ).find(([u]) =>
+                (p.usina||'').toUpperCase().includes((u.split('/')[1]||u).trim().toUpperCase()));
+              return e ? e[1] === row.cnpjDest : false;
+            }) || allProgs)
           : allProgs;
-        // Fallback: se CNPJ filtrou tudo, usa todos
-        const progsVagao = progsParaVagao.length ? progsParaVagao : allProgs;
+        const progsVagao = _progsV.length ? _progsV : allProgs;
         for (const p of progsVagao) {
           const vi = p.vagoes.findIndex(v =>
             (v.vagao||'').replace(/[\s\-]/g,'').toUpperCase() === norm
@@ -3690,35 +3667,7 @@ async function processBatchTerminal(files) {
           : `<span style="color:${r.status.startsWith('❌')? '#b91c1c':'#92400e'};font-weight:700;font-size:11px;">${r.status}</span>
              <select onchange="btManualSelect(${i},this.value)" style="margin-top:4px;font-size:10px;display:block;width:100%;padding:2px;">
                <option value="">Selecione o vagão correto...</option>
-               ${(() => {
-                 // Filter progs by CNPJ destinatário if available
-                 const cnpj = _btResults[${i}]?.cnpjDest;
-                 let progs  = ProgAPI.list().filter(p => _btProgIds.includes(p.id));
-                 let filtered = cnpj
-                   ? progs.filter(p => {
-                       // Match CNPJ against prog.usina via FILIAL_CNPJ map
-                       const cnpjNorm = Object.entries(FILIAL_CNPJ)
-                         .find(([usina]) => (p.usina||'').includes(usina.split('/')[1]?.trim() || usina));
-                       const progCnpj = cnpjNorm ? cnpjNorm[1] : null;
-                       return progCnpj === cnpj;
-                     })
-                   : progs;
-                 // Fallback: if filter returns nothing, show all
-                 if (!filtered.length) filtered = progs;
-                 const isFiltered = cnpj && filtered.length < progs.length;
-                 return (isFiltered
-                   ? '<option value="" disabled style="color:#0369a1;font-weight:700;">🔍 Filtrado por CNPJ da NF</option>'
-                   : '<option value="" disabled style="color:#92400e;">⚠️ CNPJ não identificado — verifique a usina</option>'
-                 ) + filtered.map(p =>
-                   \`<optgroup label="Ped.\${p.pedido} — \${(p.usina||'').split('/').pop().trim()} (\${p.qtd} vag.)">
-                     \${p.vagoes.map((v,vi) =>
-                       \`<option value="\${p.id}|\${vi}"\${(v.nfRetorno||'').trim()?' style="color:#aaa"':''}>
-                         Vagão \${vi+1}\${v.vagao?' — '+v.vagao:' (sem vagão)'}\${(v.nfRetorno||'').trim()?' ⚠️ já tem NF':''}
-                       </option>\`
-                     ).join('')}
-                   </optgroup>\`
-                 ).join('');
-               })()}
+               ${btGetSelectOptions(i)}
              </select>`
         }
       </td>
@@ -3736,6 +3685,34 @@ async function processBatchTerminal(files) {
   document.getElementById('bt-summary').innerHTML = summary;
 
   document.getElementById('bt-apply-btn').disabled = matched === 0;
+}
+
+function btGetSelectOptions(idx) {
+  const r    = _btResults[idx];
+  const cnpj = r ? r.cnpjDest : null;
+  let progs  = ProgAPI.list().filter(p => _btProgIds.includes(p.id));
+  let filtered = cnpj ? progs.filter(p => {
+    const e = Object.entries(FILIAL_CNPJ).find(([u]) =>
+      (p.usina||'').toUpperCase().includes((u.split('/')[1]||u).trim().toUpperCase()));
+    return e ? e[1] === cnpj : false;
+  }) : [];
+  if (!filtered.length) filtered = progs;
+  const isFilt = cnpj && filtered.length < progs.length;
+  let opts = isFilt
+    ? '<option value="" disabled style="color:#0369a1;font-weight:700;">\uD83D\uDD0D Filtrado por CNPJ da NF</option>'
+    : '<option value="" disabled style="color:#92400e;">\u26A0\uFE0F CNPJ n\u00E3o identificado \u2014 verifique a usina</option>';
+  for (const p of filtered) {
+    const ul = (p.usina||'').split('/').pop().trim();
+    opts += `<optgroup label="Ped.${p.pedido} — ${ul} (${p.qtd} vag.)">`;
+    p.vagoes.forEach((v, vi) => {
+      const hasNf = (v.nfRetorno||'').trim();
+      opts += `<option value="${p.id}|${vi}"${hasNf?' style="color:#aaa"':''}>`
+            + `Vag\u00E3o ${vi+1}${v.vagao?' \u2014 '+v.vagao:' (sem vag\u00E3o)'}${hasNf?' \u26A0\uFE0F j\u00E1 tem NF':''}`
+            + `</option>`;
+    });
+    opts += '</optgroup>';
+  }
+  return opts;
 }
 
 function btManualSelect(idx, value) {
@@ -3910,6 +3887,27 @@ function clearPrevisaoFilter() {
   if (ate) ate.value = '';
   renderPrevisao();
 }
+
+// ── Previsão listener ──
+  _unsubPrevisao = db.collection('previsaoVagoes')
+    .orderBy('data','asc')
+    .onSnapshot(snap => {
+      DB_PREVISAO.items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Only re-render if previsao tab is active
+      if (document.getElementById('tab-previsao-content')?.style.display !== 'none') {
+        renderPrevisao();
+      }
+    }, err => console.warn('previsao listener error:', err));
+
+  console.log('✅ Real-time listeners started');
+}
+
+function stopRealtimeListeners() {
+  if (_unsubProgs)    { _unsubProgs();    _unsubProgs    = null; }
+  if (_unsubPrevisao) { _unsubPrevisao(); _unsubPrevisao = null; }
+  _realtimeActive = false;
+}
+
 
 // ══════════════════════════════════════════
 // NOVA PROGRAMAÇÃO EM LOTE
