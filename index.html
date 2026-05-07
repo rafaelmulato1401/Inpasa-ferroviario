@@ -197,7 +197,7 @@ input[type=file] { display: none; }
 
 
 /* Content */
-.content { padding:1.25rem; flex:1; }
+.content { padding:.75rem 1rem; flex:1; }
 
 /* Tabs */
 .tabs { display:flex; border-bottom:2px solid var(--border); margin-bottom:1.25rem; }
@@ -236,8 +236,8 @@ input[type=file] { display: none; }
 /* Table */
 .table-card { background:var(--white); border-radius:10px; border:1px solid var(--border); overflow:hidden; }
 .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
-table { width:100%; border-collapse:collapse; font-size:11.5px; }
-thead th { background:var(--blue); color:var(--white); padding:8px 9px; text-align:left; font-size:10.5px; font-weight:600; white-space:nowrap; border-right:1px solid rgba(255,255,255,.1); }
+table { width:100%; border-collapse:collapse; font-size:11px; table-layout:fixed; }
+thead th { background:var(--blue); color:var(--white); padding:7px 7px; text-align:left; font-size:10px; font-weight:600; white-space:nowrap; border-right:1px solid rgba(255,255,255,.1); overflow:hidden; text-overflow:ellipsis; }
 thead th:last-child { border-right:none; }
 tbody tr { border-bottom:1px solid #edf0f8; }
 .row-prog { background:var(--blue-pale); }
@@ -738,20 +738,20 @@ tbody tr { border-bottom:1px solid #edf0f8; }
             <thead>
               <tr>
                 <th>Nº Pedido / Vagão</th>
-                <th style="width:90px">Encoste</th>
+                <th style="width:80px">Encoste</th>
                 <th class="hide-mobile">Produto</th>
                 <th class="hide-mobile">Usina/Filial</th>
                 <th class="hide-mobile">Cliente</th>
                 <th class="hide-mobile">Local entrega</th>
-                <th style="width:100px">Vagão Nº</th>
-                <th style="width:90px">NF Retorno</th>
-                <th style="width:80px">Volume (L)</th>
-                <th class="hide-mobile" style="width:80px">Lacre</th>
-                <th style="width:90px">NF Inpasa</th>
-                <th style="width:80px">Laudo</th>
-                <th style="width:120px">Status</th>
-                <th style="width:62px">Ações</th>
-                <th style="width:110px">Fichas Seg.</th>
+                <th style="width:95px">Vagão Nº</th>
+                <th style="width:85px">NF Retorno</th>
+                <th style="width:75px">Volume (L)</th>
+                <th class="hide-mobile" style="width:70px">Lacre</th>
+                <th style="width:85px">NF Inpasa</th>
+                <th style="width:75px">Laudo</th>
+                <th style="width:115px">Status</th>
+                <th style="width:55px">Ações</th>
+                <th style="width:100px">Fichas Seg.</th>
               </tr>
             </thead>
             <tbody id="table-body">
@@ -2657,7 +2657,7 @@ function renderTable() {
               }
             </div>` : ''}
           </td>
-          <td id="st-${p.id}-${i}" style="min-width:120px;">
+          <td id="st-${p.id}-${i}" style="min-width:115px;">
             ${getStatusBadge(v)}
             ${v.nfRetornoFile && !v.enviadoFaturamentoAt ? `
               <div style="margin-top:4px;">
@@ -2677,25 +2677,17 @@ function renderTable() {
               <div style="margin-top:4px;">
                 <span style="font-size:9px;color:#92400e;font-weight:700;">⚠️ PDF removido</span>
               </div>` : ''}
+            ${v.descTerminal ? `
+              <div style="margin-top:5px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:4px 7px;font-size:9px;line-height:1.5;">
+                <span style="font-weight:800;color:#166534;">⚓ ${v.descTerminal}</span><br>
+                <span style="color:#15803d;">📅 ${v.descDataChegada||'—'}</span>
+                ${v.descRegua && v.descRegua!=='0' ? `<span style="color:#15803d;margin-left:4px;">📏 ${v.descRegua}</span>` : ''}
+                <br><span style="color:#15803d;">🧪 ${v.descVol20 ? Number(v.descVol20).toLocaleString('pt-BR')+' L' : '—'}</span>
+                <span style="font-weight:700;margin-left:4px;color:${parseFloat(v.descDeltaVol||0)>=0?'#166534':'#b91c1c'};">
+                  Δ ${v.descDeltaVol != null ? (parseFloat(v.descDeltaVol)>=0?'+':'')+Number(v.descDeltaVol).toLocaleString('pt-BR')+'L' : '—'}
+                </span>
+              </div>` : ''}
           </td>
-          ${v.descTerminal ? `
-          <td colspan="1" style="min-width:260px;padding:6px 10px;">
-            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 10px;font-size:10px;">
-              <div style="font-weight:800;color:#166534;margin-bottom:4px;font-size:10px;letter-spacing:.5px;">
-                ⚓ DESCARGA · ${v.descTerminal}
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;color:#15803d;">
-                <span>📅 <strong>${v.descDataChegada||'—'}</strong></span>
-                <span>📏 Régua: <strong>${v.descRegua||'—'}</strong></span>
-                <span>🌡️ Temp: <strong>${v.descTempAmostra||'—'}</strong></span>
-                <span>⚗️ Dens 20°: <strong>${v.descDens20||'—'}</strong></span>
-                <span>🧪 Vol 20°: <strong>${v.descVol20 ? Number(v.descVol20).toLocaleString('pt-BR') : '—'} L</strong></span>
-                <span>Δ Vol: <strong style="color:${parseFloat(v.descDeltaVol||0)>=0?'#166534':'#b91c1c'};">
-                  ${v.descDeltaVol != null ? (parseFloat(v.descDeltaVol)>=0?'+':'')+Number(v.descDeltaVol).toLocaleString('pt-BR')+' L' : '—'}
-                </strong></span>
-              </div>
-            </div>
-          </td>` : '<td style="min-width:260px;"></td>'}
           <td></td><!-- Ações col empty in vagao row -->
           <td><!-- Fichas Seg. (per prog, empty on vagão row) --></td>
           </tr>`;
@@ -3970,6 +3962,39 @@ async function processBatchTerminal(files) {
         }
         if (!found) {
           row.status = `⚠️ Pedido ${row.pedidoNF} não encontrado neste terminal`;
+        }
+      }
+
+      // Prioridade 3: CNPJ emissora da NF → filtra pedidos da filial correspondente
+      if (row.vagaoIdx < 0 && !row.duplicate) {
+        const cnpjsNaNF  = extractAllCnpjs(row._text || '');
+        const allFilials = Object.entries(FILIAL_CNPJ); // [usina, cnpj]
+        // Encontra qual filial Inpasa está como emissora na NF
+        let usinaMatch = null;
+        for (const [usina, cnpj] of allFilials) {
+          if (cnpjsNaNF.includes(cnpj)) { usinaMatch = usina; break; }
+        }
+        if (usinaMatch) {
+          const normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+          const usinaNorm = normalize(usinaMatch);
+          // Filtra apenas os pedidos da usina identificada
+          const progsFilial = allProgs.filter(p => normalize(p.usina||'') === usinaNorm);
+          for (const p of progsFilial) {
+            for (let vi = 0; vi < p.vagoes.length; vi++) {
+              const v       = p.vagoes[vi];
+              const slotKey = `${p.id}_${vi}`;
+              if (!(v.nfRetorno||'').trim() && !_usedSlots[slotKey]) {
+                _usedSlots[slotKey] = true;
+                row.progId = p.id; row.vagaoIdx = vi;
+                row.status = `✅ Filial ${usinaMatch.split('/')[1]?.trim()||usinaMatch} → Ped.${p.pedido} Vg.${vi+1}`;
+                break;
+              }
+            }
+            if (row.vagaoIdx >= 0) break;
+          }
+          if (row.vagaoIdx < 0) {
+            row.status = `⚠️ Filial ${usinaMatch.split('/')[1]?.trim()||usinaMatch} — todos os vagões já preenchidos`;
+          }
         }
       }
 
