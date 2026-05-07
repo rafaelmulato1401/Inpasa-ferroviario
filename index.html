@@ -26,6 +26,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 
 <!-- Other libs -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -1410,8 +1411,9 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-const auth     = firebase.auth();
-const db       = firebase.firestore();
+const auth      = firebase.auth();
+const db        = firebase.firestore();
+const functions = firebase.functions();
 
 // ── Loading overlay ──
 function showLoading(msg) {
@@ -2586,6 +2588,77 @@ function renderTable() {
     tbody.innerHTML = html;
     if (can('canSeeAll')) populateTerminalSelects();
   }
+
+// ══════════════════════════════════════════
+// ENVIAR FATURAMENTO — Cloud Function via SendGrid
+// ══════════════════════════════════════════
+async function _doEnviarFaturamento(progId, vagaoIdx) {
+  const prog = ProgAPI.list().find(p => p.id === progId);
+  if (!prog) { toast('Pedido não encontrado.', true); return; }
+  const v = prog.vagoes[vagaoIdx];
+  if (!v) { toast('Vagão não encontrado.', true); return; }
+  if (!v.nfRetornoFile) { toast('Anexe o PDF da NF de Retorno antes de enviar.', true); return; }
+
+  showLoading('Enviando para faturamento...');
+  try {
+    const sentAt = fmtDateTime();
+    let pdfBase64 = null;
+    let pdfFileName = null;
+
+    // Tenta carregar o PDF da NF de Retorno do Firestore (pdfData/retorno)
+    if (v.vid) {
+      try {
+        const snap = await db.collection('programacoes').doc(progId)
+          .collection('vagoes').doc(v.vid)
+          .collection('pdfData').doc('retorno').get();
+        if (snap.exists && snap.data().data) {
+          pdfBase64   = snap.data().data;
+          pdfFileName = snap.data().fileName || v.nfRetornoFile;
+        }
+      } catch(e) { console.warn('Não foi possível carregar PDF para anexo:', e); }
+    }
+
+    // Chama a Cloud Function
+    const fn = functions.httpsCallable('enviarFaturamento');
+    await fn({
+      prog:        { pedido: prog.pedido, produto: prog.produto, usina: prog.usina,
+                     cliente: prog.cliente, local: prog.local, terminal: prog.terminal||'',
+                     data: prog.data, encoste: prog.encoste||'' },
+      vagao:       { vagao: v.vagao||'', nfRetorno: v.nfRetorno||'', volume: v.volume||'',
+                     lacre: v.lacre||'', nfInpasa: v.nfInpasa||'' },
+      pdfBase64:   pdfBase64,
+      pdfFileName: pdfFileName,
+      progId:      progId,
+      vagaoId:     v.vid || null,
+      sentAt:      sentAt,
+    });
+
+    // Atualiza local imediatamente (CF também atualiza Firestore)
+    v.enviadoFaturamentoAt = sentAt;
+    if (v.vid) {
+      try { await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: sentAt }); } catch(e) {}
+    }
+    renderTable();
+    toast('✅ Enviado para faturamento!');
+  } catch(e) {
+    console.error('enviarFaturamento:', e);
+    toast('Erro ao enviar: ' + (e.message || e), true);
+  } finally { hideLoading(); }
+}
+
+async function enviarFaturamento(progId, vagaoIdx) {
+  await _doEnviarFaturamento(progId, vagaoIdx);
+}
+
+async function reenviarFaturamento(progId, vagaoIdx) {
+  const prog = ProgAPI.list().find(p => p.id === progId);
+  const v    = prog?.vagoes[vagaoIdx];
+  const ja   = v?.enviadoFaturamentoAt ? ` (último envio: ${v.enviadoFaturamentoAt})` : '';
+  if (!confirm(`Reenviar para faturamento${ja}?`)) return;
+  // Reseta flag local para forçar reenvio
+  if (v) v.enviadoFaturamentoAt = null;
+  await _doEnviarFaturamento(progId, vagaoIdx);
+}
 
 function toggleCollapse(progId) {
   const p = ProgAPI.list().find(x=>x.id===progId);
