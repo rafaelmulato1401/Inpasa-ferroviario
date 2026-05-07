@@ -684,6 +684,7 @@ tbody tr { border-bottom:1px solid #edf0f8; }
       <div class="tab active" data-tab="prog" onclick="switchTab('prog')">Programações</div>
       <div class="tab" data-tab="profiles" id="tab-profiles" style="display:none;" onclick="switchTab('profiles')">Perfis</div>
       <div class="tab" data-tab="users" id="tab-users" style="display:none;" onclick="switchTab('users')">Usuários</div>
+      <div class="tab" data-tab="descargas" id="tab-descargas" style="display:none;" onclick="switchTab('descargas')">⚓ Descargas</div>
     </div>
 
     <!-- TAB: Programações -->
@@ -822,7 +823,107 @@ tbody tr { border-bottom:1px solid #edf0f8; }
       </div>
     </div>
 
+    <!-- TAB: Descargas -->
+    <div id="tab-descargas-content" style="display:none;">
+      <div class="ch-bar" style="margin-bottom:1.5rem;">
+        <div class="ch-left"><div class="ch-title">⚓ Descargas</div><div class="gold-bar"></div></div>
+      </div>
+
+      <!-- Cards de upload dos 3 terminais -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin-bottom:2rem;">
+
+        <!-- LOGUM -->
+        <div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:1.5rem;position:relative;">
+          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;">
+            <div style="width:10px;height:10px;border-radius:50%;background:#3b82f6;"></div>
+            <span style="font-weight:800;font-size:14px;color:var(--text);">LOGUM</span>
+            <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">aba FERRO · col N</span>
+          </div>
+          <label for="dc-file-logum" style="display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed #3b82f6;border-radius:10px;padding:1.25rem;cursor:pointer;background:#eff6ff;gap:.4rem;transition:background .2s;">
+            <span style="font-size:26px;">📊</span>
+            <span style="font-size:12px;font-weight:700;color:#1d4ed8;">Selecionar XLSX</span>
+            <span id="dc-name-logum" style="font-size:10px;color:var(--text-muted);text-align:center;">Nenhum arquivo</span>
+          </label>
+          <input type="file" id="dc-file-logum" accept=".xlsx,.xls" style="display:none;" onchange="dcFileSelected('logum', this)">
+          <div id="dc-status-logum" style="margin-top:.75rem;font-size:11px;color:var(--text-muted);min-height:16px;"></div>
+        </div>
+
+        <!-- OPLA -->
+        <div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:1.5rem;position:relative;">
+          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;">
+            <div style="width:10px;height:10px;border-radius:50%;background:#8b5cf6;"></div>
+            <span style="font-weight:800;font-size:14px;color:var(--text);">OPLA</span>
+            <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">aba DESCARGA FERRO · col N</span>
+          </div>
+          <label for="dc-file-opla" style="display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed #8b5cf6;border-radius:10px;padding:1.25rem;cursor:pointer;background:#f5f3ff;gap:.4rem;transition:background .2s;">
+            <span style="font-size:26px;">📊</span>
+            <span style="font-size:12px;font-weight:700;color:#6d28d9;">Selecionar XLSX</span>
+            <span id="dc-name-opla" style="font-size:10px;color:var(--text-muted);text-align:center;">Nenhum arquivo</span>
+          </label>
+          <input type="file" id="dc-file-opla" accept=".xlsx,.xls" style="display:none;" onchange="dcFileSelected('opla', this)">
+          <div id="dc-status-opla" style="margin-top:.75rem;font-size:11px;color:var(--text-muted);min-height:16px;"></div>
+        </div>
+
+        <!-- TERCOM -->
+        <div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:1.5rem;position:relative;">
+          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;">
+            <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;"></div>
+            <span style="font-weight:800;font-size:14px;color:var(--text);">TERCOM</span>
+            <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">aba dados · col P</span>
+          </div>
+          <label for="dc-file-tercom" style="display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed #f59e0b;border-radius:10px;padding:1.25rem;cursor:pointer;background:#fffbeb;gap:.4rem;transition:background .2s;">
+            <span style="font-size:26px;">📊</span>
+            <span style="font-size:12px;font-weight:700;color:#b45309;">Selecionar XLSX</span>
+            <span id="dc-name-tercom" style="font-size:10px;color:var(--text-muted);text-align:center;">Nenhum arquivo</span>
+          </label>
+          <input type="file" id="dc-file-tercom" accept=".xlsx,.xls" style="display:none;" onchange="dcFileSelected('tercom', this)">
+          <div id="dc-status-tercom" style="margin-top:.75rem;font-size:11px;color:var(--text-muted);min-height:16px;"></div>
+        </div>
+      </div>
+
+      <!-- Botão processar -->
+      <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
+        <button id="dc-btn-process" onclick="dcProcessAll()" disabled
+          style="background:var(--blue);color:#fff;border:none;border-radius:10px;padding:.7rem 2rem;font-weight:800;font-size:13px;cursor:pointer;opacity:.5;transition:opacity .2s;">
+          ⚡ Processar e Vincular Descargas
+        </button>
+        <span id="dc-summary" style="font-size:12px;color:var(--text-muted);"></span>
+      </div>
+
+      <!-- Tabela de resultados -->
+      <div id="dc-results" style="display:none;">
+        <div style="border:1.5px solid var(--border);border-radius:14px;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead>
+              <tr style="background:var(--blue);color:#fff;">
+                <th style="padding:10px 12px;text-align:left;font-weight:700;">Terminal</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:700;">NF Inpasa</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:700;">Vagão</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:700;">Pedido</th>
+                <th style="padding:10px 12px;text-align:left;font-weight:700;">Data Chegada</th>
+                <th style="padding:10px 12px;text-align:right;font-weight:700;">Régua</th>
+                <th style="padding:10px 12px;text-align:right;font-weight:700;">Temp. Amostra</th>
+                <th style="padding:10px 12px;text-align:right;font-weight:700;">Densidade 20°</th>
+                <th style="padding:10px 12px;text-align:right;font-weight:700;">Volume 20° (L)</th>
+                <th style="padding:10px 12px;text-align:right;font-weight:700;">Δ Volume (L)</th>
+                <th style="padding:10px 12px;text-align:center;font-weight:700;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="dc-tbody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:1rem;display:flex;align-items:center;gap:1rem;">
+          <button onclick="dcApplyAll()"
+            style="background:#16a34a;color:#fff;border:none;border-radius:10px;padding:.7rem 2rem;font-weight:800;font-size:13px;cursor:pointer;">
+            💾 Salvar no Sistema
+          </button>
+          <span id="dc-save-status" style="font-size:12px;color:var(--text-muted);"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- TAB: Perfis -->
+
     <div id="tab-profiles-content" style="display:none;">
       <div class="ch">
         <div class="ch-left"><div class="ch-title">Gerenciar Perfis</div><div class="gold-bar"></div></div>
@@ -2020,7 +2121,7 @@ async function initApp() {
   // Per-row download buttons are controlled in renderTable — no global buttons
   document.getElementById('tab-users').style.display    = can('canManageUsers')     ? 'flex' : 'none';
   document.getElementById('tab-profiles').style.display = can('canManageProfiles')  ? 'flex' : 'none';
-  document.getElementById('tab-previsao').style.display  = can('canViewPrevisao')    ? 'flex' : 'none';
+  document.getElementById('tab-descargas').style.display = (currentUser?.role === 'master') ? 'flex' : 'none';
   if (can('canEditPrevisao')) { const nb = document.getElementById('btn-nova-previsao'); if(nb) nb.style.display='flex'; }
 
   const advFilters = document.getElementById('adv-filters');
@@ -2121,13 +2222,15 @@ function checkStrength(val, prefix) {
 // ══════════════════════════════════════════
 function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tab));
-  document.getElementById('tab-prog').style.display              = tab==='prog'     ? 'block' : 'none';
-  document.getElementById('tab-users-content').style.display     = tab==='users'    ? 'block' : 'none';
-  document.getElementById('tab-profiles-content').style.display  = tab==='profiles' ? 'block' : 'none';
-  document.getElementById('tab-previsao-content').style.display  = tab==='previsao' ? 'block' : 'none';
-  if (tab==='users')    renderUsers().catch(console.error);
-  if (tab==='profiles') { renderProfiles(); populateTerminalSelects(); }
-  if (tab==='previsao') { PrevisaoAPI.loadAll().then(renderPrevisao); }
+  document.getElementById('tab-prog').style.display              = tab==='prog'      ? 'block' : 'none';
+  document.getElementById('tab-users-content').style.display     = tab==='users'     ? 'block' : 'none';
+  document.getElementById('tab-profiles-content').style.display  = tab==='profiles'  ? 'block' : 'none';
+  document.getElementById('tab-previsao-content').style.display  = tab==='previsao'  ? 'block' : 'none';
+  document.getElementById('tab-descargas-content').style.display = tab==='descargas' ? 'block' : 'none';
+  if (tab==='users')     renderUsers().catch(console.error);
+  if (tab==='profiles')  { renderProfiles(); populateTerminalSelects(); }
+  if (tab==='previsao')  { PrevisaoAPI.loadAll().then(renderPrevisao); }
+  if (tab==='descargas') { dcRenderSaved(); }
 }
 
 function updatePendingBadge() {
@@ -2577,6 +2680,24 @@ function renderTable() {
                 <span style="font-size:9px;color:#92400e;font-weight:700;">⚠️ PDF removido</span>
               </div>` : ''}
           </td>
+          ${v.descTerminal ? `
+          <td colspan="1" style="min-width:260px;padding:6px 10px;">
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 10px;font-size:10px;">
+              <div style="font-weight:800;color:#166534;margin-bottom:4px;font-size:10px;letter-spacing:.5px;">
+                ⚓ DESCARGA · ${v.descTerminal}
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;color:#15803d;">
+                <span>📅 <strong>${v.descDataChegada||'—'}</strong></span>
+                <span>📏 Régua: <strong>${v.descRegua||'—'}</strong></span>
+                <span>🌡️ Temp: <strong>${v.descTempAmostra||'—'}</strong></span>
+                <span>⚗️ Dens 20°: <strong>${v.descDens20||'—'}</strong></span>
+                <span>🧪 Vol 20°: <strong>${v.descVol20 ? Number(v.descVol20).toLocaleString('pt-BR') : '—'} L</strong></span>
+                <span>Δ Vol: <strong style="color:${parseFloat(v.descDeltaVol||0)>=0?'#166534':'#b91c1c'};">
+                  ${v.descDeltaVol != null ? (parseFloat(v.descDeltaVol)>=0?'+':'')+Number(v.descDeltaVol).toLocaleString('pt-BR')+' L' : '—'}
+                </strong></span>
+              </div>
+            </div>
+          </td>` : '<td style="min-width:260px;"></td>'}
           <td></td><!-- Ações col empty in vagao row -->
           <td><!-- Fichas Seg. (per prog, empty on vagão row) --></td>
           </tr>`;
@@ -5024,6 +5145,276 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.warn('SW erro:', err));
   });
 }
+
+// ══════════════════════════════════════════════════════════════════
+// ⚓ DESCARGAS — Parse XLSX Logum / Opla / Tercom + Vinculação
+// ══════════════════════════════════════════════════════════════════
+
+let _dcFiles    = { logum: null, opla: null, tercom: null };
+let _dcResults  = [];  // rows processadas com status de vinculação
+
+// ── Seleção de arquivo ──────────────────────────────────────────
+function dcFileSelected(terminal, input) {
+  const file = input.files[0];
+  if (!file) return;
+  _dcFiles[terminal] = file;
+  document.getElementById(`dc-name-${terminal}`).textContent = file.name;
+  document.getElementById(`dc-status-${terminal}`).textContent = '✅ Arquivo pronto';
+  document.getElementById(`dc-status-${terminal}`).style.color = 'var(--green)';
+  // Habilita botão se pelo menos 1 arquivo selecionado
+  const hasAny = Object.values(_dcFiles).some(f => f !== null);
+  const btn = document.getElementById('dc-btn-process');
+  btn.disabled = !hasAny;
+  btn.style.opacity = hasAny ? '1' : '.5';
+}
+
+// ── Parse XLSX via SheetJS ──────────────────────────────────────
+function dcReadXlsx(file, sheetName, headerRow = 0) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb  = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+        // Case-insensitive sheet lookup
+        const sn  = wb.SheetNames.find(s => s.trim().toUpperCase() === sheetName.toUpperCase());
+        if (!sn) { reject(new Error(`Aba "${sheetName}" não encontrada. Abas: ${wb.SheetNames.join(', ')}`)); return; }
+        const ws  = wb.Sheets[sn];
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'dd/mm/yyyy' });
+        // Usa a linha headerRow como cabeçalho
+        const headers = raw[headerRow] || [];
+        const rows = raw.slice(headerRow + 1).filter(r => r.some(v => v !== '' && v != null));
+        resolve({ headers, rows });
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ── Normalizar número de NF para comparação ─────────────────────
+function dcNormNF(v) {
+  if (v == null) return '';
+  return String(v).trim().replace(/\D/g, '').replace(/^0+/, '');
+}
+
+// ── Formatar data ────────────────────────────────────────────────
+function dcFmtDate(v) {
+  if (!v) return '';
+  // Se já é string dd/mm/yyyy
+  if (typeof v === 'string' && /\d{2}\/\d{2}\/\d{4}/.test(v)) return v.substring(0,10);
+  // Tenta converter
+  const d = new Date(v);
+  if (!isNaN(d)) return d.toLocaleDateString('pt-BR');
+  return String(v).substring(0, 10);
+}
+
+// ── Parsers por terminal ────────────────────────────────────────
+
+function dcParseLogum(headers, rows) {
+  // FERRO: col N(13)=NOTA, F(5)=DATA CHEGADA, K(10)=NÍVEL, AA(26)=TEMP AMOSTRA, Z(25)=DENSIDADE 20º, R(17)=VOLUME 20º
+  return rows.map(r => ({
+    terminal:    'LOGUM',
+    nf:          dcNormNF(r[13]),
+    datachegada: dcFmtDate(r[5]),
+    regua:       r[10] ?? 0,
+    tempAmostra: r[26] ?? 0,
+    dens20:      r[25] ?? 0,
+    vol20:       parseFloat(String(r[17] ?? '0').replace(',', '.')) || 0,
+  })).filter(r => r.nf);
+}
+
+function dcParseOpla(headers, rows) {
+  // DESCARGA FERRO: col N(13)=NOTA, F(5)=DATA CHEGADA, K(10)=NÍVEL, AA(26)=TEMP AMOSTRA, Z(25)=DENSIDADE 20º, R(17)=VOLUME 20º
+  return rows.map(r => ({
+    terminal:    'OPLA',
+    nf:          dcNormNF(r[13]),
+    datachegada: dcFmtDate(r[5]),
+    regua:       r[10] ?? 0,
+    tempAmostra: r[26] ?? 0,
+    dens20:      r[25] ?? 0,
+    vol20:       parseFloat(String(r[17] ?? '0').replace(',', '.')) || 0,
+  })).filter(r => r.nf);
+}
+
+function dcParseTercom(headers, rows) {
+  // dados: col P(15)=Nº Doc (NF), G(6)=DataHora, sem Nível→0, sem Temp→0, sem Dens→0, Z(25)=Quantidade 20ºC
+  return rows.map(r => ({
+    terminal:    'TERCOM',
+    nf:          dcNormNF(r[15]),
+    datachegada: dcFmtDate(r[6]),
+    regua:       0,
+    tempAmostra: 0,
+    dens20:      0,
+    vol20:       parseFloat(String(r[25] ?? '0').replace(',', '.')) || 0,
+  })).filter(r => r.nf);
+}
+
+// ── Processar todos os arquivos selecionados ────────────────────
+async function dcProcessAll() {
+  _dcResults = [];
+  document.getElementById('dc-results').style.display = 'none';
+  document.getElementById('dc-summary').textContent = 'Processando...';
+
+  const terminalColors = { LOGUM: '#3b82f6', OPLA: '#8b5cf6', TERCOM: '#f59e0b' };
+
+  // Parsear cada terminal
+  const allRows = [];
+  const parsers = [
+    { key: 'logum',  sheet: 'FERRO',          parser: dcParseLogum  },
+    { key: 'opla',   sheet: 'DESCARGA FERRO',  parser: dcParseOpla   },
+    { key: 'tercom', sheet: 'dados',           parser: dcParseTercom },
+  ];
+
+  for (const { key, sheet, parser } of parsers) {
+    const file = _dcFiles[key];
+    if (!file) continue;
+    document.getElementById(`dc-status-${key}`).textContent = '⏳ Lendo...';
+    try {
+      const { headers, rows } = await dcReadXlsx(file, sheet);
+      const parsed = parser(headers, rows);
+      allRows.push(...parsed);
+      document.getElementById(`dc-status-${key}`).textContent = `✅ ${parsed.length} registros`;
+      document.getElementById(`dc-status-${key}`).style.color = 'var(--green)';
+    } catch(e) {
+      document.getElementById(`dc-status-${key}`).textContent = `❌ ${e.message}`;
+      document.getElementById(`dc-status-${key}`).style.color = '#b91c1c';
+    }
+  }
+
+  if (!allRows.length) {
+    document.getElementById('dc-summary').textContent = '⚠️ Nenhum dado encontrado.';
+    return;
+  }
+
+  // Vincular cada linha da descarga com um vagão na programação (via nfInpasa)
+  const progs = ProgAPI.list();
+  let matched = 0, unmatched = 0;
+
+  _dcResults = allRows.map(row => {
+    let progFound = null, vagaoFound = null, vagaoIdx = -1;
+
+    // Busca por nfInpasa em todos os pedidos
+    outer: for (const p of progs) {
+      for (let i = 0; i < (p.vagoes||[]).length; i++) {
+        const v = p.vagoes[i];
+        const nfProg = dcNormNF(v.nfInpasa || '');
+        if (nfProg && nfProg === row.nf) {
+          progFound = p; vagaoFound = v; vagaoIdx = i; break outer;
+        }
+      }
+    }
+
+    const volNF  = vagaoFound ? (parseFloat(String(vagaoFound.volume || '0').replace(',','.')) || 0) : 0;
+    const deltaVol = row.vol20 && volNF ? (row.vol20 - volNF) : null;
+
+    if (vagaoFound) matched++;
+    else unmatched++;
+
+    return {
+      ...row,
+      progId:    progFound?.id || null,
+      progPedido: progFound?.pedido || '—',
+      vagaoNum:  vagaoFound?.vagao || '—',
+      vagaoIdx,
+      volNF,
+      deltaVol,
+      status:    vagaoFound ? 'vinculado' : 'não encontrado',
+    };
+  });
+
+  // Renderizar tabela de resultados
+  const tbody = document.getElementById('dc-tbody');
+  const termBadge = (t) => {
+    const colors = { LOGUM: '#3b82f6', OPLA: '#8b5cf6', TERCOM: '#f59e0b' };
+    return `<span style="background:${colors[t]}20;color:${colors[t]};font-weight:800;padding:2px 8px;border-radius:10px;font-size:10px;">${t}</span>`;
+  };
+  const deltaFmt = (d) => {
+    if (d === null) return '—';
+    const abs = Math.abs(d).toLocaleString('pt-BR');
+    return d >= 0
+      ? `<span style="color:#16a34a;font-weight:700;">+${abs}</span>`
+      : `<span style="color:#b91c1c;font-weight:700;">-${abs}</span>`;
+  };
+
+  tbody.innerHTML = _dcResults.map(r =>
+    `<tr style="border-bottom:1px solid var(--border);background:${r.status==='vinculado'?'#f0fdf4':'#fff7f7'};">
+      <td style="padding:8px 12px;">${termBadge(r.terminal)}</td>
+      <td style="padding:8px 12px;font-weight:700;font-size:11px;">${r.nf}</td>
+      <td style="padding:8px 12px;font-size:11px;">${r.vagaoNum}</td>
+      <td style="padding:8px 12px;font-size:11px;">${r.progPedido}</td>
+      <td style="padding:8px 12px;font-size:11px;">${r.datachegada}</td>
+      <td style="padding:8px 12px;text-align:right;font-size:11px;">${r.regua||'—'}</td>
+      <td style="padding:8px 12px;text-align:right;font-size:11px;">${r.tempAmostra||'—'}</td>
+      <td style="padding:8px 12px;text-align:right;font-size:11px;">${r.dens20||'—'}</td>
+      <td style="padding:8px 12px;text-align:right;font-weight:700;font-size:11px;">${r.vol20?r.vol20.toLocaleString('pt-BR'):'—'}</td>
+      <td style="padding:8px 12px;text-align:right;font-size:11px;">${deltaFmt(r.deltaVol)}</td>
+      <td style="padding:8px 12px;text-align:center;">
+        ${r.status==='vinculado'
+          ? '<span style="background:#dcfce7;color:#16a34a;font-weight:800;padding:2px 8px;border-radius:8px;font-size:10px;">✅ Vinculado</span>'
+          : '<span style="background:#fee2e2;color:#b91c1c;font-weight:800;padding:2px 8px;border-radius:8px;font-size:10px;">❌ Não encontrado</span>'}
+      </td>
+    </tr>`
+  ).join('');
+
+  document.getElementById('dc-results').style.display = 'block';
+  document.getElementById('dc-summary').innerHTML =
+    `<strong>${allRows.length}</strong> registros · ` +
+    `<span style="color:#16a34a;font-weight:700;">${matched} vinculados</span> · ` +
+    `<span style="color:#b91c1c;">${unmatched} não encontrados</span>`;
+}
+
+// ── Salvar resultados vinculados no Firestore ───────────────────
+async function dcApplyAll() {
+  const toSave = _dcResults.filter(r => r.status === 'vinculado');
+  if (!toSave.length) { toast('Nenhum item vinculado para salvar.', true); return; }
+  showLoading(`Salvando ${toSave.length} descargas...`);
+  try {
+    const at = fmtDateTime();
+    for (const r of toSave) {
+      const prog = ProgAPI.list().find(p => p.id === r.progId);
+      if (!prog) continue;
+      const v = prog.vagoes[r.vagaoIdx];
+      if (!v || !v.vid) continue;
+
+      const updates = {
+        descTerminal:    r.terminal,
+        descDataChegada: r.datachegada,
+        descRegua:       String(r.regua   ?? '0'),
+        descTempAmostra: String(r.tempAmostra ?? '0'),
+        descDens20:      String(r.dens20  ?? '0'),
+        descVol20:       String(r.vol20   ?? '0'),
+        descDeltaVol:    r.deltaVol != null ? String(Math.round(r.deltaVol)) : '0',
+        descAtualizadoEm: at,
+      };
+
+      // Atualiza objeto local
+      Object.assign(v, updates);
+
+      await ProgAPI.updateVagao(r.progId, v.vid, updates);
+    }
+    toast(`✅ ${toSave.length} descargas salvas com sucesso!`);
+    document.getElementById('dc-save-status').textContent =
+      `${toSave.length} registros salvos em ${fmtDateTime()}`;
+    renderTable();
+  } catch(e) {
+    console.error('dcApplyAll:', e);
+    toast('Erro ao salvar: ' + e.message, true);
+  } finally { hideLoading(); }
+}
+
+// ── Renderizar descargas já salvas (ao entrar na aba) ───────────
+function dcRenderSaved() {
+  // Mostra resumo dos vagões que já possuem dados de descarga
+  const progs = ProgAPI.list();
+  let total = 0;
+  progs.forEach(p => (p.vagoes||[]).forEach(v => { if (v.descTerminal) total++; }));
+  if (total > 0) {
+    document.getElementById('dc-summary').innerHTML =
+      `<span style="color:var(--green);font-weight:700;">⚓ ${total} descargas já registradas no sistema</span>`;
+  }
+}
+
+
 
 </script>
 </body>
