@@ -3458,7 +3458,120 @@ async function startRealtimeListeners() {
     renderTable();
   }, err => console.warn('progs listener error:', err));
 
-  // ── Previsão listener ──
+  
+
+const DB_PREVISAO = { items: [], _nextId: 1 };
+
+const PrevisaoAPI = {
+  list() { return DB_PREVISAO.items; },
+  async loadAll() {
+    try {
+      const snap = await db.collection('previsaoVagoes').orderBy('data','asc').get();
+      DB_PREVISAO.items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) { console.error('PrevisaoAPI.loadAll:', e); }
+    return DB_PREVISAO.items;
+  },
+  async save(data) {
+    if (data.id) {
+      await db.collection('previsaoVagoes').doc(data.id).update(data);
+    } else {
+      const ref = await db.collection('previsaoVagoes').add(data);
+      data.id = ref.id;
+    }
+    await this.loadAll();
+  },
+  async delete(id) {
+    await db.collection('previsaoVagoes').doc(id).delete();
+    await this.loadAll();
+  }
+};
+
+let editingPrevisaoId = null;
+let deletingPrevisaoId = null;
+
+function openPrevisaoModal(id = null) {
+  editingPrevisaoId = id;
+  document.getElementById('modal-previsao-title').textContent = id ? 'Editar Previsão' : 'Nova Previsão';
+  document.getElementById('pv-id').value = id || '';
+
+  // Populate terminal select
+  const pvT = document.getElementById('pv-terminal');
+  pvT.innerHTML = '<option value="">Selecione o terminal...</option>' +
+    DB.customProfiles.filter(p=>p.baseRole==='terminal')
+      .map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+
+  if (id) {
+    const pv = PrevisaoAPI.list().find(x => x.id === id);
+    if (pv) {
+      document.getElementById('pv-data').value    = pv.data || '';
+      document.getElementById('pv-encoste').value = pv.encoste || '';
+      document.getElementById('pv-hora').value    = pv.hora || '';
+      document.getElementById('pv-qtd').value     = pv.qtd || '';
+      document.getElementById('pv-terminal').value= pv.terminal || '';
+    }
+  } else {
+    ['pv-data','pv-hora','pv-qtd'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('pv-encoste').selectedIndex  = 0;
+    document.getElementById('pv-terminal').selectedIndex = 0;
+  }
+  openModal('modal-previsao');
+}
+
+async function savePrevisao() {
+  const id       = document.getElementById('pv-id').value;
+  const data     = document.getElementById('pv-data').value;
+  const encoste  = document.getElementById('pv-encoste').value;
+  const hora     = document.getElementById('pv-hora').value;
+  const qtd      = parseInt(document.getElementById('pv-qtd').value);
+  const terminal = document.getElementById('pv-terminal').value;
+
+  if (!data || !encoste || !hora || !qtd || !terminal) { toast('Preencha todos os campos.', true); return; }
+
+  showLoading('Salvando previsão...');
+  try {
+    const payload = {
+      data, encoste, hora, qtd, terminal,
+      lancadoEm: fmtDateTime(),
+      lancadoPor: currentUser.nome || currentUser.email,
+      updatedAt: fmtDateTime(),
+    };
+    if (id) payload.id = id;
+    await PrevisaoAPI.save(payload);
+    closeModal('modal-previsao');
+    renderPrevisao();
+    toast('Previsão salva com sucesso.');
+  } catch(e) { toast('Erro: ' + e.message, true); }
+  finally { hideLoading(); }
+}
+
+function openDeletePrevisao(id) {
+  deletingPrevisaoId = id;
+  openModal('modal-del-previsao');
+}
+
+async function confirmDeletePrevisao() {
+  showLoading('Excluindo...');
+  try {
+    await PrevisaoAPI.delete(deletingPrevisaoId);
+    closeModal('modal-del-previsao');
+    renderPrevisao();
+    toast('Previsão excluída.');
+  } catch(e) { toast('Erro: ' + e.message, true); }
+  finally { hideLoading(); deletingPrevisaoId = null; }
+}
+
+const _pvGroupState = {};
+function togglePvGroup(key) { _pvGroupState[key] = !_pvGroupState[key]; renderPrevisao(); }
+
+function clearPrevisaoFilter() {
+  const de  = document.getElementById('pv-filter-de');
+  const ate = document.getElementById('pv-filter-ate');
+  if (de)  de.value  = '';
+  if (ate) ate.value = '';
+  renderPrevisao();
+}
+
+// ── Previsão listener ──
   _unsubPrevisao = db.collection('previsaoVagoes')
     .orderBy('data','asc')
     .onSnapshot(snap => {
