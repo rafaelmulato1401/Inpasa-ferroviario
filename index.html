@@ -2640,6 +2640,7 @@ function triggerPdfUpload(progId, vagaoIdx, type) {
   input.value=''; input.click();
 }
 document.getElementById('fi-nf-retorno').addEventListener('change', e => { if (e.target.files[0]) processPdf(e.target.files[0],'retorno'); });
+document.getElementById('fi-batch-terminal').addEventListener('change', e => { const files = Array.from(e.target.files); if(files.length) processBatchTerminal(files); });
 document.getElementById('fi-nf-inpasa-batch').addEventListener('change', e => {
   _nlNfFiles = Array.from(e.target.files);
   document.getElementById('nl-nf-count').textContent = _nlNfFiles.length ? `${_nlNfFiles.length} arquivo(s)` : '';
@@ -3459,6 +3460,277 @@ async function startRealtimeListeners() {
   }, err => console.warn('progs listener error:', err));
 
   
+
+
+
+// ══════════════════════════════════════════
+// INPUT NOTAS TERMINAL — LOTE
+// ══════════════════════════════════════════
+let _btProgIds  = [];
+let _btTermName = '';
+let _btResults = []; // array of {file, vagaoNum, nfNum, volume, lacre, pedidoNF, vagaoIdx, status}
+
+function openBatchTerminalModal(progIdsStr, termName) {
+  _btProgIds  = (progIdsStr||'').split(',').filter(Boolean);
+  _btTermName = termName || '';
+  _btResults = [];
+  document.getElementById('bt-status').style.display  = 'none';
+  document.getElementById('bt-results').style.display = 'none';
+  document.getElementById('bt-apply-btn').disabled    = true;
+  document.getElementById('fi-batch-terminal').value  = '';
+  openModal('modal-batch-terminal');
+}
+
+function handleBatchTerminalDrop(e) {
+  const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (files.length) processBatchTerminal(files);
+}
+
+document.getElementById('fi-batch-terminal').addEventListener('change', e => {
+  const files = Array.from(e.target.files);
+  if (files.length) processBatchTerminal(files);
+});
+
+async function processBatchTerminal(files) {
+  const allProgs = ProgAPI.list().filter(p => _btProgIds.includes(p.id));
+  if (!allProgs.length) return;
+
+  _btResults = [];
+  const _usedSlots = {}; // tracks {progId_vagaoIdx: true} allocated in this batch
+  const statusEl   = document.getElementById('bt-status');
+  const progressEl = document.getElementById('bt-progress');
+  const totalEl    = document.getElementById('bt-total');
+  const barEl      = document.getElementById('bt-bar');
+  const resultsEl  = document.getElementById('bt-results');
+  const bodyEl     = document.getElementById('bt-results-body');
+
+  statusEl.style.display  = 'block';
+  resultsEl.style.display = 'none';
+  totalEl.textContent     = files.length;
+  progressEl.textContent  = '0';
+  barEl.style.width       = '0%';
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    progressEl.textContent = i + 1;
+    barEl.style.width      = `${Math.round(((i+1)/files.length)*100)}%`;
+
+    let row = { file, vagaoNum: null, nfNum: null, volume: null, lacre: null, pedidoNF: null, vagaoIdx: -1, progId: _btProgIds[0], status: '❌ Não identificado' };
+
+    try {
+      const text     = await extractPdfText(file);
+      row.vagaoNum   = extractVagaoNumber(text);
+      row.nfNum      = extractNfNumber(text);
+      row.volume     = extractVolume(text);
+      row.lacre      = extractLacre(text);
+      row.pedidoNF   = extractPedido(text);
+      row._text      = text;
+      row._file      = file;
+
+      // ── VALIDAÇÃO: NF já existe no sistema? ──
+      if (row.nfNum) {
+        // Verifica em todas as programações carregadas (não só deste terminal)
+        const todasProgs = ProgAPI.list();
+        for (const p of todasProgs) {
+          for (const v of p.vagoes) {
+            if ((v.nfRetorno||'').trim() === String(row.nfNum).trim()) {
+              const dataFmt = p.data ? fmtDate(p.data) : '?';
+              row.status    = `❌ NF ${row.nfNum} já lançada — Data ${dataFmt} · Pedido ${p.pedido}`;
+              row.vagaoIdx  = -1;
+              row.duplicate = true;
+              break;
+            }
+          }
+          if (row.duplicate) break;
+        }
+        // Também verifica duplicata dentro do próprio lote atual
+        if (!row.duplicate) {
+          const jaNoLote = _btResults.find(r => r.nfNum && String(r.nfNum) === String(row.nfNum));
+          if (jaNoLote) {
+            row.status   = `❌ NF ${row.nfNum} duplicada neste lote (já consta em outro arquivo)`;
+            row.vagaoIdx = -1;
+            row.duplicate = true;
+          }
+        }
+      }
+
+      // ── MATCHING — só executa se não for duplicata ──
+      if (!row.duplicate) {
+
+      // Prioridade 1: Vagão já registrado (placa bate exatamente)
+      if (row.vagaoNum) {
+        const norm = row.vagaoNum.toUpperCase();
+        for (const p of allProgs) {
+          const vi = p.vagoes.findIndex(v =>
+            (v.vagao||'').replace(/[\s\-]/g,'').toUpperCase() === norm
+          );
+          if (vi >= 0) {
+            const slotKey = `${p.id}_${vi}`;
+            if (!_usedSlots[slotKey]) {
+              _usedSlots[slotKey] = true;
+              row.progId = p.id; row.vagaoIdx = vi;
+              row.status = `✅ Vagão ${row.vagaoNum} → Ped.${p.pedido} Vg.${vi+1}`;
+            } else {
+              row.status = `⚠️ Vagão ${row.vagaoNum} já alocado neste lote`;
+            }
+            break;
+          }
+        }
+      }
+
+      // Prioridade 2: Pedido identificado → próximo slot livre deste pedido
+      if (row.vagaoIdx < 0 && row.pedidoNF) {
+        let found = false;
+        for (const p of allProgs) {
+          if (String(p.pedido).trim() !== String(row.pedidoNF).trim()) continue;
+          found = true;
+          // Próximo vagão sem NF E não alocado neste lote
+          let allocated = false;
+          for (let vi = 0; vi < p.vagoes.length; vi++) {
+            const v       = p.vagoes[vi];
+            const slotKey = `${p.id}_${vi}`;
+            if (!(v.nfRetorno||'').trim() && !_usedSlots[slotKey]) {
+              _usedSlots[slotKey] = true;
+              row.progId = p.id; row.vagaoIdx = vi;
+              row.status = `✅ Ped.${p.pedido} → Vagão ${vi+1}`;
+              allocated  = true;
+              break;
+            }
+          }
+          if (!allocated) {
+            // Todos os vagões deste pedido já têm NF ou foram alocados neste lote
+            const total    = p.vagoes.length;
+            const comNf    = p.vagoes.filter(v => (v.nfRetorno||'').trim()).length;
+            const alocados = Object.keys(_usedSlots).filter(k => k.startsWith(p.id+'_')).length;
+            row.status = `❌ Excesso! Ped.${p.pedido} tem ${total} vagões, ${comNf} com NF, ${alocados} alocados neste lote`;
+          }
+          break;
+        }
+        if (!found) {
+          row.status = `⚠️ Pedido ${row.pedidoNF} não encontrado neste terminal`;
+        }
+      }
+
+      // Sem match algum
+      if (row.vagaoIdx < 0 && !row.status.startsWith('⚠️') && !row.status.startsWith('❌')) {
+        row.progId = _btProgIds[0];
+        row.status = row.vagaoNum
+          ? `⚠️ Vagão ${row.vagaoNum} não encontrado`
+          : '❌ Pedido/Vagão não identificado na NF';
+      }
+
+      } // end if (!row.duplicate)
+
+    } catch(e) {
+      row.status = '❌ Erro ao ler PDF';
+    }
+
+    _btResults.push(row);
+  }
+
+  // Render results
+  statusEl.style.display  = 'none';
+  resultsEl.style.display = 'block';
+
+  bodyEl.innerHTML = _btResults.map((r, i) => `
+    <tr style="border-bottom:1px solid #edf0f8;${r.vagaoIdx>=0?'background:#f0fdf4':''}">
+      <td style="padding:6px 10px;font-size:10px;color:var(--text-muted);">${r.file.name.replace(/\.pdf$/i,'').substring(0,25)}</td>
+      <td style="padding:6px 10px;font-weight:600;">${r.vagaoNum||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">${r.nfNum||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">${r.volume||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">${r.lacre||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">${r.pedidoNF||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 10px;">
+        ${r.vagaoIdx>=0
+          ? `<span style="color:var(--green);font-weight:700;font-size:11px;">${r.status}</span>`
+          : `<span style="color:${r.status.startsWith('❌')? '#b91c1c':'#92400e'};font-weight:700;font-size:11px;">${r.status}</span>
+             <select onchange="btManualSelect(${i},this.value)" style="margin-top:4px;font-size:10px;display:block;width:100%;padding:2px;">
+               <option value="">Alocar manualmente...</option>
+               ${ProgAPI.list().filter(p=>_btProgIds.includes(p.id)).flatMap(p=>
+                 p.vagoes.map((v,vi)=>
+                   `<option value="${p.id}|${vi}">Ped.${p.pedido} · Vagão ${vi+1}${v.vagao?' ('+v.vagao+')':' (vazio)'}</option>`
+                 )
+               ).join('')}
+             </select>`
+        }
+      </td>
+    </tr>`).join('');
+
+  const matched   = _btResults.filter(r => r.vagaoIdx >= 0).length;
+  const overflow  = _btResults.filter(r => r.status.startsWith('❌') && !r.duplicate).length;
+  const dupes     = _btResults.filter(r => r.duplicate).length;
+  const warn      = _btResults.filter(r => r.status.startsWith('⚠️')).length;
+  let summary     = `<strong>${matched}</strong> de <strong>${_btResults.length}</strong> NFs vinculadas. `;
+  if (dupes    > 0) summary += `<span style="color:#b91c1c;font-weight:700;">❌ ${dupes} já existem no sistema.</span> `;
+  if (overflow > 0) summary += `<span style="color:#b91c1c;font-weight:700;">❌ ${overflow} excedem vagões disponíveis.</span> `;
+  if (warn     > 0) summary += `<span style="color:#92400e;">⚠️ ${warn} não identificadas.</span> `;
+  if (matched === _btResults.length) summary += `<span style="color:var(--green);">✅ Tudo pronto!</span>`;
+  document.getElementById('bt-summary').innerHTML = summary;
+
+  document.getElementById('bt-apply-btn').disabled = matched === 0;
+}
+
+function btManualSelect(idx, value) {
+  if (!value || value==='-1') return;
+  const parts = value.split('|');
+  _btResults[idx].progId   = parts[0];
+  _btResults[idx].vagaoIdx = parseInt(parts[1]);
+  _btResults[idx].status   = '✅ Selecionado manualmente';
+  document.getElementById('bt-apply-btn').disabled = !_btResults.some(r=>r.vagaoIdx>=0);
+}
+
+async function applyBatchTerminal() {
+  const toApply = _btResults.filter(r => r.vagaoIdx >= 0);
+  if (!toApply.length) { toast('Nenhuma NF vinculada.', true); return; }
+
+  showLoading(`Aplicando ${toApply.length} NF(s)...`);
+  try {
+    const at = fmtDateTime();
+    for (const r of toApply) {
+      const prog = ProgAPI.list().find(p => p.id === (r.progId || _btProgIds[0]));
+      if (!prog) continue;
+      const v = prog.vagoes[r.vagaoIdx];
+      if (!v) continue;
+
+      const updates = {};
+      if (r.vagaoNum && !v.vagao)      { v.vagao = r.vagaoNum; updates.vagao = r.vagaoNum; }
+      if (r.nfNum && !v.nfRetorno)     { v.nfRetorno = r.nfNum; updates.nfRetorno = r.nfNum; }
+      if (r.volume && !v.volume)       { v.volume = r.volume; updates.volume = r.volume; }
+      if (r.lacre && !v.lacre)         { v.lacre = r.lacre; updates.lacre = r.lacre; }
+      if (r._file) {
+        v.nfRetornoFile = r._file.name;
+        v.nfRetornoAt   = at;
+        v.nfRetornoFileObj = r._file;
+        updates.nfRetornoFile = r._file.name;
+        updates.nfRetornoAt   = at;
+        // Save PDF to Firestore
+        if (v.vid) {
+          try {
+            const reader = new FileReader();
+            const b64 = await new Promise((res, rej) => {
+              reader.onload  = () => res(reader.result.split(',')[1]);
+              reader.onerror = () => rej(new Error('read error'));
+              reader.readAsDataURL(r._file);
+            });
+            await db.collection('programacoes').doc(r.progId||_btProgIds[0])
+              .collection('vagoes').doc(v.vid)
+              .collection('pdfData').doc('retorno')
+              .set({ data: b64, fileName: r._file.name, sizeBytes: r._file.size, uploadedAt: at });
+          } catch(e) { console.warn('pdfData save:', e); }
+        }
+      }
+      if (v.vid && Object.keys(updates).length) {
+        await ProgAPI.updateVagao(r.progId||_btProgIds[0], v.vid, updates);
+      }
+    }
+    closeModal('modal-batch-terminal');
+    renderTable();
+    toast(`✅ ${toApply.length} NF(s) aplicadas com sucesso!`);
+  } catch(e) {
+    console.error('applyBatchTerminal:', e);
+    toast('Erro: ' + e.message, true);
+  } finally { hideLoading(); }
+}
 
 const DB_PREVISAO = { items: [], _nextId: 1 };
 
