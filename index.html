@@ -26,7 +26,6 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 
 <!-- Other libs -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -1514,7 +1513,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth      = firebase.auth();
 const db        = firebase.firestore();
-const functions = firebase.functions();
 
 // ── Loading overlay ──
 function showLoading(msg) {
@@ -2713,7 +2711,10 @@ function renderTable() {
 // ══════════════════════════════════════════
 // ENVIAR FATURAMENTO — Cloud Function via SendGrid
 // ══════════════════════════════════════════
-async function _doEnviarFaturamento(progId, vagaoIdx) {
+// ══════════════════════════════════════════
+// ENVIAR FATURAMENTO — mailto direto
+// ══════════════════════════════════════════
+async function enviarFaturamento(progId, vagaoIdx) {
   const prog = ProgAPI.list().find(p => p.id === progId);
   if (!prog) { toast('Pedido não encontrado.', true); return; }
   const v = prog.vagoes[vagaoIdx];
@@ -2727,9 +2728,9 @@ async function _doEnviarFaturamento(progId, vagaoIdx) {
     'kemelyn.penha@inpasa.com.br',
   ];
 
-  const sentAt = fmtDateTime();
+  const sentAt  = fmtDateTime();
   const subject = `FATURAMENTO FERROVIÁRIO - VAGÃO ${v.vagao||'?'} - TERMINAL ${prog.terminal||'?'} - DATA ${prog.data||'?'}`;
-  const body =
+  const body    =
     `Pedido: ${prog.pedido||'—'}\n` +
     `Produto: ${prog.produto||'—'}\n` +
     `Usina/Filial: ${prog.usina||'—'}\n` +
@@ -2747,88 +2748,29 @@ async function _doEnviarFaturamento(progId, vagaoIdx) {
     `Enviado em: ${sentAt}\n` +
     `Enviado por: ${currentUser?.nome||currentUser?.email||'—'}`;
 
-  async function marcarEnviado() {
-    v.enviadoFaturamentoAt = sentAt;
-    if (v.vid) {
-      try { await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: sentAt }); }
-      catch(e) { console.warn('updateVagao enviadoFaturamentoAt:', e); }
-    }
-    renderTable();
+  const mailto = `mailto:${TO_EMAILS.join(',')}` +
+    `?subject=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(body)}`;
+
+  window.open(mailto, '_blank');
+
+  // Registra imediatamente no Firestore e na tela
+  v.enviadoFaturamentoAt = sentAt;
+  if (v.vid) {
+    try { await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: sentAt }); }
+    catch(e) { console.warn('updateVagao enviadoFaturamentoAt:', e); }
   }
-
-  showLoading('Enviando para faturamento...');
-
-  try {
-    // Tenta carregar PDF do Firestore para anexar
-    let pdfBase64 = null, pdfFileName = null;
-    if (v.vid) {
-      try {
-        const snap = await db.collection('programacoes').doc(progId)
-          .collection('vagoes').doc(v.vid)
-          .collection('pdfData').doc('retorno').get();
-        if (snap.exists && snap.data()?.data) {
-          pdfBase64   = snap.data().data;
-          pdfFileName = snap.data().fileName || v.nfRetornoFile;
-        }
-      } catch(e) { console.warn('PDF retorno:', e); }
-    }
-
-    // Tenta Cloud Function (envia email automático)
-    const fn = functions.httpsCallable('enviarFaturamento', { timeout: 30000 });
-    await fn({
-      prog:    { pedido: prog.pedido, produto: prog.produto, usina: prog.usina,
-                 cliente: prog.cliente, local: prog.local, terminal: prog.terminal||'',
-                 data: prog.data, encoste: prog.encoste||'' },
-      vagao:   { vagao: v.vagao||'', nfRetorno: v.nfRetorno||'', volume: v.volume||'',
-                 lacre: v.lacre||'', nfInpasa: v.nfInpasa||'' },
-      pdfBase64, pdfFileName,
-      progId, vagaoId: v.vid||null, sentAt,
-    });
-
-    await marcarEnviado();
-    toast('✅ Email enviado para faturamento!');
-
-  } catch(cfErr) {
-    console.warn('CF indisponível, abrindo mailto:', cfErr);
-    hideLoading();
-
-    // Fallback: abre cliente de email com dados preenchidos
-    const mailto = `mailto:${TO_EMAILS.join(',')}` +
-      `?subject=${encodeURIComponent(subject)}` +
-      `&body=${encodeURIComponent(body)}`;
-    window.open(mailto, '_blank');
-
-    const confirmado = confirm(
-      '⚠️ Envio automático indisponível.\n\n' +
-      'Seu cliente de email foi aberto com todos os dados.\n\n' +
-      'Após enviar o email manualmente, clique OK para registrar no sistema.\n' +
-      'Clique Cancelar se não enviou.'
-    );
-
-    if (confirmado) {
-      await marcarEnviado();
-      toast('✅ Envio registrado manualmente!');
-    } else {
-      toast('Envio cancelado.', true);
-    }
-    return;
-
-  } finally {
-    hideLoading();
-  }
-}
-
-async function enviarFaturamento(progId, vagaoIdx) {
-  await _doEnviarFaturamento(progId, vagaoIdx);
+  renderTable();
+  toast('✅ Email de faturamento aberto e envio registrado!');
 }
 
 async function reenviarFaturamento(progId, vagaoIdx) {
   const prog = ProgAPI.list().find(p => p.id === progId);
   const v    = prog?.vagoes[vagaoIdx];
-  const ja   = v?.enviadoFaturamentoAt ? ` (último envio: ${v.enviadoFaturamentoAt})` : '';
+  const ja   = v?.enviadoFaturamentoAt ? ` (último: ${v.enviadoFaturamentoAt})` : '';
   if (!confirm(`Reenviar para faturamento${ja}?`)) return;
-  if (v) v.enviadoFaturamentoAt = null;
-  await _doEnviarFaturamento(progId, vagaoIdx);
+  v.enviadoFaturamentoAt = null;
+  await enviarFaturamento(progId, vagaoIdx);
 }
 
 
