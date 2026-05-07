@@ -3462,9 +3462,25 @@ async function startRealtimeListeners() {
     renderTable();
   }, err => console.warn('progs listener error:', err));
 
-  
+  // ── Previsão listener ──
+  _unsubPrevisao = db.collection('previsaoVagoes')
+    .orderBy('data','asc')
+    .onSnapshot(snap => {
+      DB_PREVISAO.items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Only re-render if previsao tab is active
+      if (document.getElementById('tab-previsao-content')?.style.display !== 'none') {
+        renderPrevisao();
+      }
+    }, err => console.warn('previsao listener error:', err));
 
+  console.log('✅ Real-time listeners started');
+}
 
+function stopRealtimeListeners() {
+  if (_unsubProgs)    { _unsubProgs();    _unsubProgs    = null; }
+  if (_unsubPrevisao) { _unsubPrevisao(); _unsubPrevisao = null; }
+  _realtimeActive = false;
+}
 
 // ══════════════════════════════════════════
 // INPUT NOTAS TERMINAL — LOTE
@@ -3845,27 +3861,6 @@ function clearPrevisaoFilter() {
   if (ate) ate.value = '';
   renderPrevisao();
 }
-
-// ── Previsão listener ──
-  _unsubPrevisao = db.collection('previsaoVagoes')
-    .orderBy('data','asc')
-    .onSnapshot(snap => {
-      DB_PREVISAO.items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Only re-render if previsao tab is active
-      if (document.getElementById('tab-previsao-content')?.style.display !== 'none') {
-        renderPrevisao();
-      }
-    }, err => console.warn('previsao listener error:', err));
-
-  console.log('✅ Real-time listeners started');
-}
-
-function stopRealtimeListeners() {
-  if (_unsubProgs)    { _unsubProgs();    _unsubProgs    = null; }
-  if (_unsubPrevisao) { _unsubPrevisao(); _unsubPrevisao = null; }
-  _realtimeActive = false;
-}
-
 
 // ══════════════════════════════════════════
 // NOVA PROGRAMAÇÃO EM LOTE
