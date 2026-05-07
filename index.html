@@ -3965,36 +3965,19 @@ async function processBatchTerminal(files) {
         }
       }
 
-      // Prioridade 3: CNPJ emissora da NF → filtra pedidos da filial correspondente
+      // Prioridade 3: CNPJ emissora da NF → identifica filial para pré-filtrar select manual
+      // NÃO aloca automaticamente — exige escolha explícita do usuário
       if (row.vagaoIdx < 0 && !row.duplicate) {
         const cnpjsNaNF  = extractAllCnpjs(row._text || '');
-        const allFilials = Object.entries(FILIAL_CNPJ); // [usina, cnpj]
-        // Encontra qual filial Inpasa está como emissora na NF
+        const allFilials = Object.entries(FILIAL_CNPJ);
         let usinaMatch = null;
         for (const [usina, cnpj] of allFilials) {
           if (cnpjsNaNF.includes(cnpj)) { usinaMatch = usina; break; }
         }
         if (usinaMatch) {
-          const normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
-          const usinaNorm = normalize(usinaMatch);
-          // Filtra apenas os pedidos da usina identificada
-          const progsFilial = allProgs.filter(p => normalize(p.usina||'') === usinaNorm);
-          for (const p of progsFilial) {
-            for (let vi = 0; vi < p.vagoes.length; vi++) {
-              const v       = p.vagoes[vi];
-              const slotKey = `${p.id}_${vi}`;
-              if (!(v.nfRetorno||'').trim() && !_usedSlots[slotKey]) {
-                _usedSlots[slotKey] = true;
-                row.progId = p.id; row.vagaoIdx = vi;
-                row.status = `✅ Filial ${usinaMatch.split('/')[1]?.trim()||usinaMatch} → Ped.${p.pedido} Vg.${vi+1}`;
-                break;
-              }
-            }
-            if (row.vagaoIdx >= 0) break;
-          }
-          if (row.vagaoIdx < 0) {
-            row.status = `⚠️ Filial ${usinaMatch.split('/')[1]?.trim()||usinaMatch} — todos os vagões já preenchidos`;
-          }
+          const filialCurta = usinaMatch.split('/')[1]?.trim() || usinaMatch;
+          row._usinaMatch = usinaMatch; // usado para pré-filtrar o select
+          row.status = `⚠️ Filial ${filialCurta} identificada — selecione o vagão`;
         }
       }
 
@@ -4030,15 +4013,26 @@ async function processBatchTerminal(files) {
       <td style="padding:6px 10px;">
         ${r.vagaoIdx>=0
           ? `<span style="color:var(--green);font-weight:700;font-size:11px;">${r.status}</span>`
-          : `<span style="color:${r.status.startsWith('❌')? '#b91c1c':'#92400e'};font-weight:700;font-size:11px;">${r.status}</span>
-             <select onchange="btManualSelect(${i},this.value)" style="margin-top:4px;font-size:10px;display:block;width:100%;padding:2px;">
-               <option value="">Alocar manualmente...</option>
-               ${ProgAPI.list().filter(p=>_btProgIds.includes(p.id)).flatMap(p=>
-                 p.vagoes.map((v,vi)=>
-                   `<option value="${p.id}|${vi}">Ped.${p.pedido} · Vagão ${vi+1}${v.vagao?' ('+v.vagao+')':' (vazio)'}</option>`
-                 )
-               ).join('')}
-             </select>`
+          : (() => {
+              const _normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+              // Filial identificada pelo CNPJ → mostra só pedidos dessa filial; senão mostra todos
+              const _progsSelect = r._usinaMatch
+                ? allProgs.filter(p => _normalize(p.usina||'') === _normalize(r._usinaMatch))
+                : allProgs;
+              const _labelSelect = r._usinaMatch
+                ? `Escolher vagão (${(r._usinaMatch.split('/')[1]||r._usinaMatch).trim()})...`
+                : 'Alocar manualmente...';
+              const _opts = _progsSelect.flatMap(p =>
+                p.vagoes.map((v,vi) =>
+                  `<option value="${p.id}|${vi}">Ped.${p.pedido} · Vagão ${vi+1}${v.vagao?' ('+v.vagao+')':' (vazio)'}</option>`
+                )
+              ).join('');
+              return `<span style="color:${r.status.startsWith('❌')?'#b91c1c':'#92400e'};font-weight:700;font-size:11px;">${r.status}</span>
+                      <select onchange="btManualSelect(${i},this.value)" style="margin-top:4px;font-size:10px;display:block;width:100%;padding:2px;">
+                        <option value="">${_labelSelect}</option>
+                        ${_opts}
+                      </select>`;
+            })()
         }
       </td>
     </tr>`).join('');
