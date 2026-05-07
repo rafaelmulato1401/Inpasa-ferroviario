@@ -2597,53 +2597,104 @@ async function _doEnviarFaturamento(progId, vagaoIdx) {
   if (!prog) { toast('Pedido não encontrado.', true); return; }
   const v = prog.vagoes[vagaoIdx];
   if (!v) { toast('Vagão não encontrado.', true); return; }
-  if (!v.nfRetornoFile) { toast('Anexe o PDF da NF de Retorno antes de enviar.', true); return; }
+
+  const TO_EMAILS = [
+    'atendimento.externo@inpasa.com.br',
+    'csc.faturamento@inpasa.com.br',
+    'csc@elosinpasa.com.br',
+    'rafael.mulato@inpasa.com.br',
+    'kemelyn.penha@inpasa.com.br',
+  ];
+
+  const sentAt = fmtDateTime();
+  const subject = `FATURAMENTO FERROVIÁRIO - VAGÃO ${v.vagao||'?'} - TERMINAL ${prog.terminal||'?'} - DATA ${prog.data||'?'}`;
+  const body =
+    `Pedido: ${prog.pedido||'—'}\n` +
+    `Produto: ${prog.produto||'—'}\n` +
+    `Usina/Filial: ${prog.usina||'—'}\n` +
+    `Cliente: ${prog.cliente||'—'}\n` +
+    `Local de Entrega: ${prog.local||'—'}\n` +
+    `Terminal: ${prog.terminal||'—'}\n` +
+    `Data Programação: ${prog.data||'—'}\n` +
+    `Encoste: ${prog.encoste||'—'}\n\n` +
+    `--- VAGÃO ---\n` +
+    `Vagão Nº: ${v.vagao||'—'}\n` +
+    `NF de Retorno: ${v.nfRetorno||'—'}\n` +
+    `Volume (L): ${v.volume||'—'}\n` +
+    `Lacre: ${v.lacre||'—'}\n` +
+    `NF Inpasa: ${v.nfInpasa||'—'}\n\n` +
+    `Enviado em: ${sentAt}\n` +
+    `Enviado por: ${currentUser?.nome||currentUser?.email||'—'}`;
+
+  async function marcarEnviado() {
+    v.enviadoFaturamentoAt = sentAt;
+    if (v.vid) {
+      try { await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: sentAt }); }
+      catch(e) { console.warn('updateVagao enviadoFaturamentoAt:', e); }
+    }
+    renderTable();
+  }
 
   showLoading('Enviando para faturamento...');
-  try {
-    const sentAt = fmtDateTime();
-    let pdfBase64 = null;
-    let pdfFileName = null;
 
-    // Tenta carregar o PDF da NF de Retorno do Firestore (pdfData/retorno)
+  try {
+    // Tenta carregar PDF do Firestore para anexar
+    let pdfBase64 = null, pdfFileName = null;
     if (v.vid) {
       try {
         const snap = await db.collection('programacoes').doc(progId)
           .collection('vagoes').doc(v.vid)
           .collection('pdfData').doc('retorno').get();
-        if (snap.exists && snap.data().data) {
+        if (snap.exists && snap.data()?.data) {
           pdfBase64   = snap.data().data;
           pdfFileName = snap.data().fileName || v.nfRetornoFile;
         }
-      } catch(e) { console.warn('Não foi possível carregar PDF para anexo:', e); }
+      } catch(e) { console.warn('PDF retorno:', e); }
     }
 
-    // Chama a Cloud Function
-    const fn = functions.httpsCallable('enviarFaturamento');
+    // Tenta Cloud Function (envia email automático)
+    const fn = functions.httpsCallable('enviarFaturamento', { timeout: 30000 });
     await fn({
-      prog:        { pedido: prog.pedido, produto: prog.produto, usina: prog.usina,
-                     cliente: prog.cliente, local: prog.local, terminal: prog.terminal||'',
-                     data: prog.data, encoste: prog.encoste||'' },
-      vagao:       { vagao: v.vagao||'', nfRetorno: v.nfRetorno||'', volume: v.volume||'',
-                     lacre: v.lacre||'', nfInpasa: v.nfInpasa||'' },
-      pdfBase64:   pdfBase64,
-      pdfFileName: pdfFileName,
-      progId:      progId,
-      vagaoId:     v.vid || null,
-      sentAt:      sentAt,
+      prog:    { pedido: prog.pedido, produto: prog.produto, usina: prog.usina,
+                 cliente: prog.cliente, local: prog.local, terminal: prog.terminal||'',
+                 data: prog.data, encoste: prog.encoste||'' },
+      vagao:   { vagao: v.vagao||'', nfRetorno: v.nfRetorno||'', volume: v.volume||'',
+                 lacre: v.lacre||'', nfInpasa: v.nfInpasa||'' },
+      pdfBase64, pdfFileName,
+      progId, vagaoId: v.vid||null, sentAt,
     });
 
-    // Atualiza local imediatamente (CF também atualiza Firestore)
-    v.enviadoFaturamentoAt = sentAt;
-    if (v.vid) {
-      try { await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: sentAt }); } catch(e) {}
+    await marcarEnviado();
+    toast('✅ Email enviado para faturamento!');
+
+  } catch(cfErr) {
+    console.warn('CF indisponível, abrindo mailto:', cfErr);
+    hideLoading();
+
+    // Fallback: abre cliente de email com dados preenchidos
+    const mailto = `mailto:${TO_EMAILS.join(',')}` +
+      `?subject=${encodeURIComponent(subject)}` +
+      `&body=${encodeURIComponent(body)}`;
+    window.open(mailto, '_blank');
+
+    const confirmado = confirm(
+      '⚠️ Envio automático indisponível.\n\n' +
+      'Seu cliente de email foi aberto com todos os dados.\n\n' +
+      'Após enviar o email manualmente, clique OK para registrar no sistema.\n' +
+      'Clique Cancelar se não enviou.'
+    );
+
+    if (confirmado) {
+      await marcarEnviado();
+      toast('✅ Envio registrado manualmente!');
+    } else {
+      toast('Envio cancelado.', true);
     }
-    renderTable();
-    toast('✅ Enviado para faturamento!');
-  } catch(e) {
-    console.error('enviarFaturamento:', e);
-    toast('Erro ao enviar: ' + (e.message || e), true);
-  } finally { hideLoading(); }
+    return;
+
+  } finally {
+    hideLoading();
+  }
 }
 
 async function enviarFaturamento(progId, vagaoIdx) {
@@ -2655,10 +2706,10 @@ async function reenviarFaturamento(progId, vagaoIdx) {
   const v    = prog?.vagoes[vagaoIdx];
   const ja   = v?.enviadoFaturamentoAt ? ` (último envio: ${v.enviadoFaturamentoAt})` : '';
   if (!confirm(`Reenviar para faturamento${ja}?`)) return;
-  // Reseta flag local para forçar reenvio
   if (v) v.enviadoFaturamentoAt = null;
   await _doEnviarFaturamento(progId, vagaoIdx);
 }
+
 
 function toggleCollapse(progId) {
   const p = ProgAPI.list().find(x=>x.id===progId);
