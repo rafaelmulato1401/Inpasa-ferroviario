@@ -3509,6 +3509,53 @@ async function confirmDeletePrevisao() {
 }
 
 const _pvGroupState = {};
+function renderPrevisao() {
+  const tbody = document.getElementById('previsao-body');
+  if (!tbody) return;
+
+  const de  = (document.getElementById('pv-filter-de')?.value  || '').trim();
+  const ate = (document.getElementById('pv-filter-ate')?.value || '').trim();
+
+  let items = PrevisaoAPI.list().slice();
+
+  // Filtro por data
+  if (de)  items = items.filter(pv => pv.data >= de);
+  if (ate) items = items.filter(pv => pv.data <= ate);
+
+  // Ordena por data asc, depois encoste
+  items.sort((a, b) => (a.data||'').localeCompare(b.data||'') || (a.encoste||'').localeCompare(b.encoste||''));
+
+  if (!items.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma previsão cadastrada.</td></tr>';
+    return;
+  }
+
+  const canEdit   = can('canEditPrevisao');
+  const canDelete = can('canEditPrevisao');
+
+  tbody.innerHTML = items.map(pv => {
+    const dataFmt  = pv.data    ? fmtDate(pv.data)   : '—';
+    const horaFmt  = pv.hora    ? pv.hora             : '—';
+    const qtdFmt   = pv.qtd     ? pv.qtd              : '—';
+    const lancado  = pv.lancadoEm ? pv.lancadoEm      : '—';
+    const terminal = pv.terminal  ? ' · ' + esc(pv.terminal) : '';
+
+    return '<tr>' +
+      '<td style="padding:10px 14px;font-size:12px;">' +
+        '<strong>' + esc(pv.encoste || '—') + '</strong>' +
+        '<span style="font-size:10px;color:var(--text-muted);margin-left:6px;">' + dataFmt + terminal + '</span>' +
+      '</td>' +
+      '<td style="padding:10px 14px;font-size:12px;">' + horaFmt + '</td>' +
+      '<td style="padding:10px 14px;font-size:12px;">' + qtdFmt + '</td>' +
+      '<td style="padding:10px 14px;font-size:11px;color:var(--text-muted);">' + lancado + '</td>' +
+      '<td style="padding:10px 14px;">' +
+        (canEdit   ? '<button class="icon-btn" title="Editar"  onclick="openPrevisaoModal(\'' + pv.id + '\')">✏️</button> ' : '') +
+        (canDelete ? '<button class="icon-btn" title="Excluir" onclick="openDeletePrevisao(\'' + pv.id + '\')">🗑️</button>' : '') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
 function togglePvGroup(key) { _pvGroupState[key] = !_pvGroupState[key]; renderPrevisao(); }
 
 function clearPrevisaoFilter() {
