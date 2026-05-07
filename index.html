@@ -3426,15 +3426,18 @@ async function startRealtimeListeners() {
   }
 
   _unsubProgs = q.onSnapshot(async snap => {
-    // Rebuild programacoes from snapshot
-    const newProgs = snap.docs.map(d => ({
-      id: d.id,
-      collapsed: (DB.programacoes.find(p=>p.id===d.id)||{}).collapsed || false,
-      vagoes: (DB.programacoes.find(p=>p.id===d.id)||{}).vagoes || [],
-      ...d.data()
-    }));
+    // Rebuild programacoes from snapshot — preserve collapsed + vagoes state
+    const newProgs = snap.docs.map(d => {
+      const existing = DB.programacoes.find(p => p.id === d.id);
+      return {
+        id: d.id,
+        collapsed: existing ? existing.collapsed : false, // preserve user's expand/collapse
+        vagoes: existing ? existing.vagoes : [],          // preserve loaded vagoes
+        ...d.data()
+      };
+    });
 
-    // Load vagoes only for new/changed docs
+    // Load vagoes only for new/changed docs (not for unchanged ones)
     const changed = snap.docChanges().filter(c => c.type !== 'removed');
     await Promise.all(changed.map(async c => {
       const prog = newProgs.find(p => p.id === c.doc.id);
