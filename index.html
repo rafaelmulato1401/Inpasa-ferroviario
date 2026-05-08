@@ -3193,7 +3193,7 @@ async function processPdf(file, type) {
         ${chaveAcesso ? `<div class="form-field"><label>Chave de Acesso NF-e <span style="font-size:9px;color:var(--green);">✅ 44 dígitos</span></label>
           <input type="text" value="${chaveAcesso}" readonly
             style="font-size:9px;letter-spacing:.5px;font-family:monospace;background:#f0f9ff;color:#0369a1;cursor:text;border-color:#bae6fd;"
-            onclick="this.select()" title="Clique para selecionar"></div>` : ''}\`;
+            onclick="this.select()" title="Clique para selecionar"></div>` : ''}`;
       const warn = document.getElementById('pdf-warn');
       const cnpjOk = pdfExtracted?.cnpjOk !== false;
       if (!vagaoNum&&!lacre&&!nfNum) {
