@@ -2652,9 +2652,11 @@ function renderTable() {
             value="${esc(v.volume||'')}" ${!canR?'disabled':''}
             oninput="handleInlineInput('${p.id}',${i},'volume',this.value)"></td>
           <td class="hide-mobile">
-            ${v.temperatura ? `<div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">🌡️ ${v.temperatura}°C</div>` : ''}
-            <input class="inline-input" type="text" placeholder="Lacre" value="${esc(v.lacre)}" ${!canL?'disabled':''}
-            oninput="handleInlineInput('${p.id}',${i},'lacre',this.value)">
+            <div style="display:flex;align-items:center;gap:5px;">
+              <input class="inline-input" style="flex:1;min-width:0;" type="text" placeholder="Lacre" value="${esc(v.lacre)}" ${!canL?'disabled':''}
+              oninput="handleInlineInput('${p.id}',${i},'lacre',this.value)">
+              ${v.temperatura ? `<span style="font-size:9px;color:var(--text-muted);white-space:nowrap;">🌡️${v.temperatura}°</span>` : ''}
+            </div>
           </td>
           <td><div class="pdf-cell">
             <input class="inline-input" type="text" placeholder="Nº NF" value="${esc(v.nfInpasa)}" disabled>
