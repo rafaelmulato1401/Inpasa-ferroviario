@@ -4765,7 +4765,7 @@ async function nlProcessAll() {
             for (const p of progsToSearch) {
               const vi = findVagaoByPlate(p, row.vagao);
               const sk = p.id + '_' + vi;
-              if (vi >= 0 && !_usedNfSlots[sk]) {
+              if (vi >= 0 && !_usedNfSlots[sk] && !(p.vagoes[vi].nfInpasa||'').trim()) {
                 _usedNfSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
                 row.status = '✅ Vagão ' + row.vagao + ' → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vg.' + (vi+1);
                 break;
@@ -4796,7 +4796,7 @@ async function nlProcessAll() {
           for (const p of progsToSearch) {
             const vi = findVagaoByPlate(p, row.vagao);
             const sk = p.id + '_' + vi;
-            if (vi >= 0 && !_usedLaudoSlots[sk]) {
+            if (vi >= 0 && !_usedLaudoSlots[sk] && !p.vagoes[vi].laudoFile) {
               _usedLaudoSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
               row.status = '✅ Vagão ' + row.vagao + ' → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vg.' + (vi+1);
               break;
