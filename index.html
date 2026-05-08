@@ -2356,7 +2356,7 @@ async function saveVagaoField(progId, idx) {
     await ProgAPI.updateVagao(progId, v.vid, {
       vagao:v.vagao||'', nfRetorno:v.nfRetorno||'', lacre:v.lacre||'', nfInpasa:v.nfInpasa||'',
       volume:v.volume||'',
-      chaveAcesso:v.chaveAcesso||null, lacreInpasa:v.lacreInpasa||null, temperatura:v.temperatura||null,
+      chaveAcesso:v.chaveAcesso||null, lacreInpasa:v.lacreInpasa||null, temperatura:v.temperatura||null, regua:v.regua||null,
       nfRetornoFile:v.nfRetornoFile||null, nfRetornoPath:v.nfRetornoPath||null, nfRetornoUrl:v.nfRetornoUrl||null,
       nfInpasaFile:v.nfInpasaFile||null,  nfInpasaPath:v.nfInpasaPath||null,  nfInpasaUrl:v.nfInpasaUrl||null,
       nfRetornoAt:v.nfRetornoAt||null, nfInpasaAt:v.nfInpasaAt||null,
@@ -2750,6 +2750,7 @@ async function enviarFaturamento(progId, vagaoIdx) {
     (v.chaveAcesso ? `Chave de Acesso: ${v.chaveAcesso}\n` : '') +
     `Volume (L): ${v.volume||'—'}\n` +
     (v.temperatura ? `Temperatura: ${v.temperatura}°C\n` : '') +
+    (v.regua       ? `Régua: ${v.regua}\n`               : '') +
     `Lacre: ${v.lacre||'—'}\n` +
     (v.lacreInpasa ? `Lacre Inpasa: ${v.lacreInpasa}\n` : '') +
     `NF Inpasa: ${v.nfInpasa||'—'}\n\n` +
@@ -3131,6 +3132,13 @@ function extractTemperatura(text) {
   return m[1].split('/')[0].replace(',', '.').trim();
 }
 
+function extractRegua(text) {
+  // Teciap: "RÉGUA: 330. ," ou "RÉGUA: 340." — remove ponto/vírgula finais
+  const m = text.match(/R[EÉ]GUA[:\s]+([\d.,]+)/i);
+  if (!m) return null;
+  return m[1].replace(/[.,\s]+$/, '').trim();
+}
+
 async function processPdf(file, type) {
   toast('Lendo PDF…');
   try {
@@ -3144,6 +3152,7 @@ async function processPdf(file, type) {
       const pedidoNF    = extractPedido(text);
       const chaveAcesso = extractChaveAcesso(text);
       const temperatura = extractTemperatura(text);
+      const regua       = extractRegua(text);
       
       // Validação de CNPJ: NF deve pertencer à filial da programação
       const cnpjCheck = validateNfCnpj(text, ctx.progId);
@@ -3160,7 +3169,7 @@ async function processPdf(file, type) {
         }
       }
       
-      pdfExtracted = { type:'retorno', file, text, vagaoNum, lacre, lacreInpasa, chaveAcesso, temperatura, nfNum, volume, pedidoNF, ctx, cnpjOk: cnpjCheck.ok };
+      pdfExtracted = { type:'retorno', file, text, vagaoNum, lacre, lacreInpasa, chaveAcesso, temperatura, regua, nfNum, volume, pedidoNF, ctx, cnpjOk: cnpjCheck.ok };
       document.getElementById('pdf-modal-title').textContent = 'Dados extraídos — NF de Retorno';
       document.getElementById('pdf-modal-desc').textContent  = `Arquivo: ${file.name}. Confirme os dados antes de aplicar.`;
       document.getElementById('pdf-extracted-fields').innerHTML = `
@@ -3274,6 +3283,7 @@ async function applyPdfData() {
     if (pdfExtracted.chaveAcesso && !v.chaveAcesso)   v.chaveAcesso   = pdfExtracted.chaveAcesso;
     if (pdfExtracted.lacreInpasa && !v.lacreInpasa)   v.lacreInpasa   = pdfExtracted.lacreInpasa;
     if (pdfExtracted.temperatura && !v.temperatura)   v.temperatura   = pdfExtracted.temperatura;
+    if (pdfExtracted.regua       && !v.regua)         v.regua         = pdfExtracted.regua;
     const volVal = document.getElementById('pe-volume')?.value.trim();
     if (volVal)   v.volume    = volVal;
     v.nfRetornoAt  = fmtDateTime();
@@ -3946,6 +3956,7 @@ async function processBatchTerminal(files) {
       row.lacreInpasa  = _lacreObj.lacreInpasa;
       row.chaveAcesso  = extractChaveAcesso(text);
       row.temperatura  = extractTemperatura(text);
+      row.regua        = extractRegua(text);
       row.pedidoNF     = extractPedido(text);
       row._text        = text;
       row._file        = file;
@@ -4208,6 +4219,7 @@ async function applyBatchTerminal() {
       if (r.chaveAcesso && !v.chaveAcesso) { v.chaveAcesso = r.chaveAcesso; updates.chaveAcesso = r.chaveAcesso; }
       if (r.lacreInpasa && !v.lacreInpasa) { v.lacreInpasa = r.lacreInpasa; updates.lacreInpasa = r.lacreInpasa; }
       if (r.temperatura && !v.temperatura) { v.temperatura = r.temperatura; updates.temperatura = r.temperatura; }
+      if (r.regua       && !v.regua)       { v.regua       = r.regua;       updates.regua       = r.regua; }
       if (r._file) {
         v.nfRetornoFile = r._file.name;
         v.nfRetornoAt   = at;
