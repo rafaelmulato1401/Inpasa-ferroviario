@@ -1732,7 +1732,44 @@ const ProgAPI = {
     await db.collection('programacoes').doc(progId).collection('vagoes').doc(vid).update(safeFields);
   },
 
-  async delete(id) {
+  async addVagao(progId) {
+    // Cria um novo vagão vazio na programação
+    const prog = this.list().find(p => p.id === progId);
+    if (!prog) return;
+    const ref = await db.collection('programacoes').doc(progId).collection('vagoes').add({
+      vagao:'', nfRetorno:'', volume:'', lacre:'', nfInpasa:'',
+      nfRetornoFile:null, nfInpasaFile:null, laudoFile:null,
+      nfRetornoAt:null, nfInpasaAt:null, laudoAt:null,
+      enviadoFaturamentoAt:null, createdAt: new Date().toISOString(),
+    });
+    // Adiciona ao objeto local imediatamente
+    const newV = { vid: ref.id, vagao:'', nfRetorno:'', volume:'', lacre:'', nfInpasa:'',
+      nfRetornoFile:null, nfInpasaFile:null, laudoFile:null };
+    prog.vagoes.push(newV);
+    prog.qtd = prog.vagoes.length;
+    // Atualiza qtd no documento pai
+    await db.collection('programacoes').doc(progId).update({ qtd: prog.qtd });
+    return ref.id;
+  },
+
+  async deleteVagao(progId, vid) {
+    // Remove vagão e seus pdfData
+    const prog = this.list().find(p => p.id === progId);
+    const pdSnap = await db.collection('programacoes').doc(progId)
+      .collection('vagoes').doc(vid).collection('pdfData').get();
+    const batch = db.batch();
+    pdSnap.docs.forEach(pd => batch.delete(pd.ref));
+    batch.delete(db.collection('programacoes').doc(progId).collection('vagoes').doc(vid));
+    await batch.commit();
+    // Remove do objeto local
+    if (prog) {
+      prog.vagoes = prog.vagoes.filter(v => v.vid !== vid);
+      prog.qtd = prog.vagoes.length;
+      await db.collection('programacoes').doc(progId).update({ qtd: prog.qtd });
+    }
+  },
+
+
     // Delete all vagoes and their pdfData subcollections
     const vSnap = await db.collection('programacoes').doc(id).collection('vagoes').get();
     for (const vDoc of vSnap.docs) {
@@ -2278,7 +2315,17 @@ function openProgModal(progId=null) {
     document.getElementById('f-terminal').value  = p.terminal||'';
     document.getElementById('f-encoste').value   = p.encoste||'';
     document.getElementById('f-vagoes').value    = p.qtd;
-    document.getElementById('f-vagoes').disabled = true;
+    document.getElementById('f-vagoes').disabled = false;
+    // Hint informativo ao editar
+    let hint = document.getElementById('f-vagoes-hint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.id = 'f-vagoes-hint';
+      hint.style.cssText = 'font-size:10px;color:var(--text-muted);margin-top:3px;';
+      document.getElementById('f-vagoes').parentNode.appendChild(hint);
+    }
+    hint.textContent = `Atual: ${p.qtd} vagões — aumente para adicionar, reduza para remover os últimos (sem dados)`;
+
   } else {
     ['f-data','f-pedido','f-cliente','f-local','f-vagoes'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('f-produto').selectedIndex  = 0;
@@ -2306,8 +2353,40 @@ async function saveProg() {
   showLoading('Salvando...');
   try {
     if (editingProgId) {
-      await ProgAPI.update(editingProgId,{data,pedido,produto,usina,cliente,local,terminal,encoste});
-      toast('Programação atualizada.');
+      await ProgAPI.update(editingProgId, {data, pedido, produto, usina, cliente, local, terminal, encoste});
+
+      // Ajustar quantidade de vagões se mudou
+      const prog    = ProgAPI.list().find(p => p.id === editingProgId);
+      const qtdAtual = prog?.vagoes?.length || 0;
+
+      if (qtd > qtdAtual) {
+        // Adicionar vagões novos
+        const toAdd = qtd - qtdAtual;
+        for (let i = 0; i < toAdd; i++) {
+          await ProgAPI.addVagao(editingProgId);
+        }
+        toast(`Programação atualizada. +${toAdd} vagão(s) adicionado(s).`);
+
+      } else if (qtd < qtdAtual) {
+        // Remover apenas vagões sem dados (do final)
+        const vagoes = prog.vagoes;
+        let removidos = 0;
+        for (let i = vagoes.length - 1; i >= qtd; i--) {
+          const v = vagoes[i];
+          const temDados = (v.vagao||'').trim() || (v.nfRetorno||'').trim() || (v.nfInpasa||'').trim() || (v.laudoFile||'').trim();
+          if (temDados) {
+            toast(`⚠️ Vagão ${i+1} tem dados — não foi removido. Removidos: ${removidos} vagão(s).`, true);
+            break;
+          }
+          if (v.vid) await ProgAPI.deleteVagao(editingProgId, v.vid);
+          removidos++;
+        }
+        if (removidos > 0 && removidos === qtdAtual - qtd) toast(`Programação atualizada. -${removidos} vagão(s) removido(s).`);
+
+      } else {
+        toast('Programação atualizada.');
+      }
+
     } else {
       await ProgAPI.create({data,pedido,produto,usina,cliente,local,terminal,encoste,qtd});
       toast('Programação criada com sucesso.');
