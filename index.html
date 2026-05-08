@@ -2352,6 +2352,7 @@ function encosteBadge(enc) {
   </span>`;
 }
 
+function getStatusBadge(v) {
   if (v.enviadoFaturamentoAt)     return '<span class="badge" style="background:#ede9f8;color:#5b21b6;">✈ Env. Faturamento</span>';
   if ((v.nfInpasa  ||'').trim())  return '<span class="badge b-concluido">Concluído</span>';
   if ((v.nfRetorno ||'').trim())  return '<span class="badge b-faturamento">Ag. faturamento</span>';
