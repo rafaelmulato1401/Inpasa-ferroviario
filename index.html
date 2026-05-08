@@ -1733,17 +1733,19 @@ const ProgAPI = {
   },
 
   async addVagao(progId) {
-    // Cria um novo vagão vazio na programação
+    // Cria um novo vagão vazio na programação com idx correto
     const prog = this.list().find(p => p.id === progId);
     if (!prog) return;
+    const nextIdx = prog.vagoes.length; // idx baseado na posição atual
     const ref = await db.collection('programacoes').doc(progId).collection('vagoes').add({
+      idx: nextIdx,
       vagao:'', nfRetorno:'', volume:'', lacre:'', nfInpasa:'',
       nfRetornoFile:null, nfInpasaFile:null, laudoFile:null,
       nfRetornoAt:null, nfInpasaAt:null, laudoAt:null,
       enviadoFaturamentoAt:null, createdAt: new Date().toISOString(),
     });
     // Adiciona ao objeto local imediatamente
-    const newV = { vid: ref.id, vagao:'', nfRetorno:'', volume:'', lacre:'', nfInpasa:'',
+    const newV = { vid: ref.id, idx: nextIdx, vagao:'', nfRetorno:'', volume:'', lacre:'', nfInpasa:'',
       nfRetornoFile:null, nfInpasaFile:null, laudoFile:null };
     prog.vagoes.push(newV);
     prog.qtd = prog.vagoes.length;
