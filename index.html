@@ -2314,8 +2314,11 @@ function openProgModal(progId=null) {
     document.getElementById('f-local').value     = p.local;
     document.getElementById('f-terminal').value  = p.terminal||'';
     document.getElementById('f-encoste').value   = p.encoste||'';
-    document.getElementById('f-vagoes').value    = p.qtd;
-    document.getElementById('f-vagoes').disabled = false;
+    const fVagoes = document.getElementById('f-vagoes');
+    fVagoes.value    = p.qtd;
+    fVagoes.disabled = false;
+    fVagoes.readOnly = false;
+    fVagoes.style.cssText = 'pointer-events:auto;opacity:1;cursor:text;background:var(--white);';
     // Hint informativo ao editar
     let hint = document.getElementById('f-vagoes-hint');
     if (!hint) {
@@ -2334,7 +2337,12 @@ function openProgModal(progId=null) {
     document.getElementById('f-encoste').selectedIndex  = 0;
     document.getElementById('f-cliente').selectedIndex  = 0;
     document.getElementById('f-local').selectedIndex    = 0;
-    document.getElementById('f-vagoes').disabled=false;
+    const fVagoesNew = document.getElementById('f-vagoes');
+    fVagoesNew.disabled = false;
+    fVagoesNew.readOnly = false;
+    fVagoesNew.style.cssText = '';
+    const oldHint = document.getElementById('f-vagoes-hint');
+    if (oldHint) oldHint.textContent = '';
   }
   openModal('modal-prog');
 }
