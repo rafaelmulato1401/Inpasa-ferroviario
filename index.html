@@ -2356,6 +2356,7 @@ async function saveVagaoField(progId, idx) {
     await ProgAPI.updateVagao(progId, v.vid, {
       vagao:v.vagao||'', nfRetorno:v.nfRetorno||'', lacre:v.lacre||'', nfInpasa:v.nfInpasa||'',
       volume:v.volume||'',
+      chaveAcesso:v.chaveAcesso||null, lacreInpasa:v.lacreInpasa||null,
       nfRetornoFile:v.nfRetornoFile||null, nfRetornoPath:v.nfRetornoPath||null, nfRetornoUrl:v.nfRetornoUrl||null,
       nfInpasaFile:v.nfInpasaFile||null,  nfInpasaPath:v.nfInpasaPath||null,  nfInpasaUrl:v.nfInpasaUrl||null,
       nfRetornoAt:v.nfRetornoAt||null, nfInpasaAt:v.nfInpasaAt||null,
@@ -3080,33 +3081,63 @@ function extractLacre(text) {
   // Helper: limpa pontos de milhar do lacre e retorna só dígitos
   const cleanLacre = s => s.replace(/\./g, '').replace(/\s/g, '').trim();
 
+  // LACRE INPASA — campo exclusivo da Teciap ("LACRE INPASA: 3463041")
+  let lacreInpasa = null;
+  const mi = text.match(/LACRE\s+INPASA[:\s]+([\d.]{4,12})/i);
+  if (mi) lacreInpasa = cleanLacre(mi[1]);
+
+  // LACRE de transporte (campo principal)
+  let lacre = null;
+
   // Padrão 1 — Ultracargo: "LACRE 3553 / LAUDO..." — número antes da barra
   let m = text.match(/LACRE\s+([\d.]{4,12})\s*\//i);
-  if (m) return cleanLacre(m[1]);
+  if (m) { lacre = cleanLacre(m[1]); }
 
-  // Padrão 2 — Teciap: "LACRE: 3.463.018" ou "LACRE:3462943"
-  m = text.match(/LACRE[:\s]+([\d.]{4,12})(?!\s*\/)/i);
-  if (m) return cleanLacre(m[1]);
+  // Padrão 2 — Teciap: "LACRE: 3.463.018" — evita capturar "LACRE INPASA"
+  if (!lacre) {
+    m = text.match(/LACRE[:\s]+([\d.]{4,12})(?!\s*(?:INPASA|\/))/i);
+    if (m) lacre = cleanLacre(m[1]);
+  }
 
-  // Padrão 3 — "Lacres: XXXX" (número com ou sem pontos)
-  m = text.match(/Lacres?[:\s]+([\d.]{4,12})(?!\d{3})/i);
-  if (m) return cleanLacre(m[1]);
+  // Padrão 3 — "Lacres: XXXX"
+  if (!lacre) {
+    m = text.match(/Lacres?[:\s]+([\d.]{4,12})(?!\d{3})/i);
+    if (m) lacre = cleanLacre(m[1]);
+  }
+
+  return { lacre, lacreInpasa };
+}
+
+
+function extractChaveAcesso(text) {
+  // Padrão 1: 44 dígitos contínuos (após normalização de espaços entre dígitos)
+  const normalized = text.replace(/(\d)\s+(?=\d)/g, '$1');
+  let m = normalized.match(/\b(\d{44})\b/);
+  if (m) return m[1];
+
+  // Padrão 2: 11 grupos de 4 dígitos separados por espaços (formato DANFE)
+  // ex: "5126 0534 1300 6300 0427 5500 1000 0493 4110 1845 8712"
+  m = text.match(/(\d{4}(?:\s+\d{4}){10})/);
+  if (m) {
+    const chave = m[1].replace(/\s/g, '');
+    if (chave.length === 44) return chave;
+  }
 
   return null;
 }
 
 
-async function processPdf(file, type) {
   toast('Lendo PDF…');
   try {
     const text = await extractPdfText(file);
     const ctx  = pdfContext;
     if (type==='retorno') {
-      const vagaoNum = extractVagaoNumber(text);
-      const lacre    = extractLacre(text);
-      const nfNum    = extractNfNumber(text);
-      const volume   = extractVolume(text);
-      const pedidoNF = extractPedido(text);
+      const vagaoNum    = extractVagaoNumber(text);
+      const { lacre, lacreInpasa } = extractLacre(text);
+      const nfNum       = extractNfNumber(text);
+      const volume      = extractVolume(text);
+      const pedidoNF    = extractPedido(text);
+      const chaveAcesso = extractChaveAcesso(text);
       
       // Validação de CNPJ: NF deve pertencer à filial da programação
       const cnpjCheck = validateNfCnpj(text, ctx.progId);
@@ -3123,7 +3154,7 @@ async function processPdf(file, type) {
         }
       }
       
-      pdfExtracted   = { type:'retorno', file, text, vagaoNum, lacre, nfNum, volume, pedidoNF, ctx, cnpjOk: cnpjCheck.ok };
+      pdfExtracted   = { type:'retorno', file, text, vagaoNum, lacre, lacreInpasa, chaveAcesso, nfNum, volume, pedidoNF, ctx, cnpjOk: cnpjCheck.ok };
       document.getElementById('pdf-modal-title').textContent = 'Dados extraídos — NF de Retorno';
       document.getElementById('pdf-modal-desc').textContent  = `Arquivo: ${file.name}. Confirme os dados antes de aplicar.`;
       document.getElementById('pdf-extracted-fields').innerHTML = `
@@ -3225,9 +3256,12 @@ async function applyPdfData() {
       warn.textContent='Formato inválido. O vagão deve ter 3 letras + 7 dígitos (ex: TCS0994928).';
       return;
     }
-    if (vagaoNum) v.vagao = vagaoNum; // save full: TCS0994928
+    if (vagaoNum) v.vagao = vagaoNum;
     if (nfRet)    v.nfRetorno = nfRet;
     if (lacre)    v.lacre     = lacre;
+    // Salva chave de acesso (44 dígitos) se extraída
+    if (pdfExtracted.chaveAcesso && !v.chaveAcesso) v.chaveAcesso = pdfExtracted.chaveAcesso;
+    if (pdfExtracted.lacreInpasa && !v.lacreInpasa) v.lacreInpasa = pdfExtracted.lacreInpasa;
     const volVal = document.getElementById('pe-volume')?.value.trim();
     if (volVal)   v.volume    = volVal;
     v.nfRetornoAt  = fmtDateTime();
@@ -3891,14 +3925,17 @@ async function processBatchTerminal(files) {
     let row = { file, vagaoNum: null, nfNum: null, volume: null, lacre: null, pedidoNF: null, vagaoIdx: -1, progId: _btProgIds[0], status: '❌ Não identificado' };
 
     try {
-      const text     = await extractPdfText(file);
-      row.vagaoNum   = extractVagaoNumber(text);
-      row.nfNum      = extractNfNumber(text);
-      row.volume     = extractVolume(text);
-      row.lacre      = extractLacre(text);
-      row.pedidoNF   = extractPedido(text);
-      row._text      = text;
-      row._file      = file;
+      const text       = await extractPdfText(file);
+      row.vagaoNum     = extractVagaoNumber(text);
+      row.nfNum        = extractNfNumber(text);
+      row.volume       = extractVolume(text);
+      const _lacreObj  = extractLacre(text);
+      row.lacre        = _lacreObj.lacre;
+      row.lacreInpasa  = _lacreObj.lacreInpasa;
+      row.chaveAcesso  = extractChaveAcesso(text);
+      row.pedidoNF     = extractPedido(text);
+      row._text        = text;
+      row._file        = file;
 
       // ── VALIDAÇÃO: NF já existe no sistema? ──
       if (row.nfNum) {
@@ -4021,20 +4058,30 @@ async function processBatchTerminal(files) {
   statusEl.style.display  = 'none';
   resultsEl.style.display = 'block';
 
+  // Helper: input inline editável
+  const editInput = (i, field, val, placeholder, width='80px') =>
+    val
+      ? `<span style="font-weight:600;font-size:11px;">${val}</span>`
+      : `<input type="text" value=""
+           placeholder="${placeholder}"
+           oninput="btFieldEdit(${i},'${field}',this.value)"
+           style="width:${width};font-size:10px;padding:2px 5px;border:1.5px solid #f59e0b;
+                  border-radius:5px;background:#fffbeb;color:#92400e;outline:none;"
+           title="Campo não identificado — preencha manualmente">`;
+
   bodyEl.innerHTML = _btResults.map((r, i) => `
-    <tr style="border-bottom:1px solid #edf0f8;${r.vagaoIdx>=0?'background:#f0fdf4':''}">
-      <td style="padding:6px 10px;font-size:10px;color:var(--text-muted);">${r.file.name.replace(/\.pdf$/i,'').substring(0,25)}</td>
-      <td style="padding:6px 10px;font-weight:600;">${r.vagaoNum||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">${r.nfNum||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">${r.volume||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">${r.lacre||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">${r.pedidoNF||'<em style="color:#ccc">—</em>'}</td>
-      <td style="padding:6px 10px;">
+    <tr id="bt-row-${i}" style="border-bottom:1px solid #edf0f8;${r.vagaoIdx>=0?'background:#f0fdf4':''}">
+      <td style="padding:6px 8px;font-size:10px;color:var(--text-muted);">${r.file.name.replace(/\.pdf$/i,'').substring(0,22)}</td>
+      <td style="padding:6px 8px;">${editInput(i,'vagaoNum',r.vagaoNum,'TCT0000000','90px')}</td>
+      <td style="padding:6px 8px;">${editInput(i,'nfNum',r.nfNum,'212417','60px')}</td>
+      <td style="padding:6px 8px;">${editInput(i,'volume',r.volume,'104198','65px')}</td>
+      <td style="padding:6px 8px;">${editInput(i,'lacre',r.lacre,'3463001','65px')}</td>
+      <td style="padding:6px 8px;font-size:11px;">${r.pedidoNF||'<em style="color:#ccc">—</em>'}</td>
+      <td style="padding:6px 8px;min-width:155px;">
         ${r.vagaoIdx>=0
           ? `<span style="color:var(--green);font-weight:700;font-size:11px;">${r.status}</span>`
           : (() => {
               const _normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
-              // Filial identificada pelo CNPJ → mostra só pedidos dessa filial; senão mostra todos
               const _progsSelect = r._usinaMatch
                 ? allProgs.filter(p => _normalize(p.usina||'') === _normalize(r._usinaMatch))
                 : allProgs;
@@ -4070,6 +4117,54 @@ async function processBatchTerminal(files) {
   document.getElementById('bt-apply-btn').disabled = matched === 0;
 }
 
+function btFieldEdit(idx, field, value) {
+  const r = _btResults[idx];
+  if (!r) return;
+  const v = value.trim();
+
+  // Atualiza o campo no objeto de resultado
+  if (field === 'vagaoNum') {
+    // Normaliza formato: remove traços e espaços, maiúsculas
+    r.vagaoNum = v.replace(/[\s\-]/g,'').toUpperCase() || null;
+    // Se o vagão foi preenchido E já tem progId selecionado, tenta re-vincular pelo vagão
+    if (r.vagaoNum && r.progId) {
+      const allProgs = ProgAPI.list();
+      for (const p of allProgs) {
+        const vi = findVagaoByPlate ? findVagaoByPlate(p, r.vagaoNum) : -1;
+        if (vi >= 0) {
+          r.vagaoIdx = vi; r.progId = p.id;
+          r.status = `✅ Vagão ${r.vagaoNum} → Ped.${p.pedido} Vg.${vi+1} (manual)`;
+          btRefreshRow(idx); return;
+        }
+      }
+    }
+  } else if (field === 'nfNum') {
+    r.nfNum = v.replace(/^0+/,'') || null;
+  } else if (field === 'volume') {
+    r.volume = v || null;
+  } else if (field === 'lacre') {
+    r.lacre = v.replace(/\./g,'') || null;
+  }
+
+  // Atualiza botão aplicar
+  const matched = _btResults.filter(r => r.vagaoIdx >= 0).length;
+  document.getElementById('bt-apply-btn').disabled = matched === 0;
+}
+
+// Atualiza apenas a linha afetada sem re-renderizar tudo
+function btRefreshRow(idx) {
+  const r = _btResults[idx];
+  const row = document.getElementById(`bt-row-${idx}`);
+  if (!row) return;
+  row.style.background = r.vagaoIdx >= 0 ? '#f0fdf4' : '';
+  const statusCell = row.querySelector('td:last-child');
+  if (statusCell && r.vagaoIdx >= 0) {
+    statusCell.innerHTML = `<span style="color:var(--green);font-weight:700;font-size:11px;">${r.status}</span>`;
+  }
+  const matched = _btResults.filter(r => r.vagaoIdx >= 0).length;
+  document.getElementById('bt-apply-btn').disabled = matched === 0;
+}
+
 function btManualSelect(idx, value) {
   if (!value || value==='-1') return;
   const parts = value.split('|');
@@ -4093,10 +4188,12 @@ async function applyBatchTerminal() {
       if (!v) continue;
 
       const updates = {};
-      if (r.vagaoNum && !v.vagao)      { v.vagao = r.vagaoNum; updates.vagao = r.vagaoNum; }
-      if (r.nfNum && !v.nfRetorno)     { v.nfRetorno = r.nfNum; updates.nfRetorno = r.nfNum; }
-      if (r.volume && !v.volume)       { v.volume = r.volume; updates.volume = r.volume; }
-      if (r.lacre && !v.lacre)         { v.lacre = r.lacre; updates.lacre = r.lacre; }
+      if (r.vagaoNum && !v.vagao)         { v.vagao       = r.vagaoNum;    updates.vagao       = r.vagaoNum; }
+      if (r.nfNum && !v.nfRetorno)         { v.nfRetorno   = r.nfNum;       updates.nfRetorno   = r.nfNum; }
+      if (r.volume && !v.volume)           { v.volume      = r.volume;      updates.volume      = r.volume; }
+      if (r.lacre && !v.lacre)             { v.lacre       = r.lacre;       updates.lacre       = r.lacre; }
+      if (r.chaveAcesso && !v.chaveAcesso) { v.chaveAcesso = r.chaveAcesso; updates.chaveAcesso = r.chaveAcesso; }
+      if (r.lacreInpasa && !v.lacreInpasa) { v.lacreInpasa = r.lacreInpasa; updates.lacreInpasa = r.lacreInpasa; }
       if (r._file) {
         v.nfRetornoFile = r._file.name;
         v.nfRetornoAt   = at;
