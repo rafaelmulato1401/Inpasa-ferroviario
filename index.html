@@ -2356,7 +2356,7 @@ async function saveVagaoField(progId, idx) {
     await ProgAPI.updateVagao(progId, v.vid, {
       vagao:v.vagao||'', nfRetorno:v.nfRetorno||'', lacre:v.lacre||'', nfInpasa:v.nfInpasa||'',
       volume:v.volume||'',
-      chaveAcesso:v.chaveAcesso||null, lacreInpasa:v.lacreInpasa||null,
+      chaveAcesso:v.chaveAcesso||null, lacreInpasa:v.lacreInpasa||null, temperatura:v.temperatura||null,
       nfRetornoFile:v.nfRetornoFile||null, nfRetornoPath:v.nfRetornoPath||null, nfRetornoUrl:v.nfRetornoUrl||null,
       nfInpasaFile:v.nfInpasaFile||null,  nfInpasaPath:v.nfInpasaPath||null,  nfInpasaUrl:v.nfInpasaUrl||null,
       nfRetornoAt:v.nfRetornoAt||null, nfInpasaAt:v.nfInpasaAt||null,
@@ -2651,8 +2651,11 @@ function renderTable() {
           <td style="width:80px"><input class="inline-input" type="text" placeholder="Volume (L)"
             value="${esc(v.volume||'')}" ${!canR?'disabled':''}
             oninput="handleInlineInput('${p.id}',${i},'volume',this.value)"></td>
-          <td class="hide-mobile"><input class="inline-input" type="text" placeholder="Lacre" value="${esc(v.lacre)}" ${!canL?'disabled':''}
-            oninput="handleInlineInput('${p.id}',${i},'lacre',this.value)"></td>
+          <td class="hide-mobile">
+            ${v.temperatura ? `<div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">🌡️ ${v.temperatura}°C</div>` : ''}
+            <input class="inline-input" type="text" placeholder="Lacre" value="${esc(v.lacre)}" ${!canL?'disabled':''}
+            oninput="handleInlineInput('${p.id}',${i},'lacre',this.value)">
+          </td>
           <td><div class="pdf-cell">
             <input class="inline-input" type="text" placeholder="Nº NF" value="${esc(v.nfInpasa)}" disabled>
             ${inpHtml}
@@ -2747,8 +2750,11 @@ async function enviarFaturamento(progId, vagaoIdx) {
     `--- VAGÃO ---\n` +
     `Vagão Nº: ${v.vagao||'—'}\n` +
     `NF de Retorno: ${v.nfRetorno||'—'}\n` +
+    (v.chaveAcesso ? `Chave de Acesso: ${v.chaveAcesso}\n` : '') +
     `Volume (L): ${v.volume||'—'}\n` +
+    (v.temperatura ? `Temperatura: ${v.temperatura}°C\n` : '') +
     `Lacre: ${v.lacre||'—'}\n` +
+    (v.lacreInpasa ? `Lacre Inpasa: ${v.lacreInpasa}\n` : '') +
     `NF Inpasa: ${v.nfInpasa||'—'}\n\n` +
     `Enviado em: ${sentAt}\n` +
     `Enviado por: ${currentUser?.nome||currentUser?.email||'—'}`;
@@ -3126,7 +3132,15 @@ function extractChaveAcesso(text) {
   return null;
 }
 
+function extractTemperatura(text) {
+  // Teciap:    "Temperatura: 26,00/26,00" → pega primeiro valor antes da barra
+  // Ultracargo: "Temperatura 30,6 Ambiente..." → sem dois pontos
+  const m = text.match(/Temperatura[:\s]+([\d,]+)/i);
+  if (!m) return null;
+  return m[1].split('/')[0].replace(',', '.').trim();
+}
 
+async function processPdf(file, type) {
   toast('Lendo PDF…');
   try {
     const text = await extractPdfText(file);
@@ -3138,6 +3152,7 @@ function extractChaveAcesso(text) {
       const volume      = extractVolume(text);
       const pedidoNF    = extractPedido(text);
       const chaveAcesso = extractChaveAcesso(text);
+      const temperatura = extractTemperatura(text);
       
       // Validação de CNPJ: NF deve pertencer à filial da programação
       const cnpjCheck = validateNfCnpj(text, ctx.progId);
@@ -3154,7 +3169,7 @@ function extractChaveAcesso(text) {
         }
       }
       
-      pdfExtracted   = { type:'retorno', file, text, vagaoNum, lacre, lacreInpasa, chaveAcesso, nfNum, volume, pedidoNF, ctx, cnpjOk: cnpjCheck.ok };
+      pdfExtracted = { type:'retorno', file, text, vagaoNum, lacre, lacreInpasa, chaveAcesso, temperatura, nfNum, volume, pedidoNF, ctx, cnpjOk: cnpjCheck.ok };
       document.getElementById('pdf-modal-title').textContent = 'Dados extraídos — NF de Retorno';
       document.getElementById('pdf-modal-desc').textContent  = `Arquivo: ${file.name}. Confirme os dados antes de aplicar.`;
       document.getElementById('pdf-extracted-fields').innerHTML = `
@@ -3173,7 +3188,12 @@ function extractChaveAcesso(text) {
         </div>
         <div class="form-field"><label>Número da NF de Retorno (DANFE)</label><input type="text" id="pe-nfret" value="${nfNum||''}" placeholder="Não identificado — insira manualmente"></div>
         <div class="form-field"><label>Volume (L)</label><input type="text" id="pe-volume" value="${volume||''}" placeholder="Ex: 104.761"></div>
-        <div class="form-field"><label>Lacre</label><input type="text" id="pe-lacre" value="${lacre||''}" placeholder="Não identificado — insira manualmente"></div>`;
+        <div class="form-field"><label>Lacre</label><input type="text" id="pe-lacre" value="${lacre||''}" placeholder="Não identificado — insira manualmente"></div>
+        ${temperatura ? `<div class="form-field"><label>Temperatura (°C)</label><input type="text" value="${temperatura}" readonly style="background:#f5f5f5;color:var(--text-muted);cursor:default;"></div>` : ''}
+        ${chaveAcesso ? `<div class="form-field"><label>Chave de Acesso NF-e <span style="font-size:9px;color:var(--green);">✅ 44 dígitos</span></label>
+          <input type="text" value="${chaveAcesso}" readonly
+            style="font-size:9px;letter-spacing:.5px;font-family:monospace;background:#f0f9ff;color:#0369a1;cursor:text;border-color:#bae6fd;"
+            onclick="this.select()" title="Clique para selecionar"></div>` : ''}\`;
       const warn = document.getElementById('pdf-warn');
       const cnpjOk = pdfExtracted?.cnpjOk !== false;
       if (!vagaoNum&&!lacre&&!nfNum) {
@@ -3260,8 +3280,9 @@ async function applyPdfData() {
     if (nfRet)    v.nfRetorno = nfRet;
     if (lacre)    v.lacre     = lacre;
     // Salva chave de acesso (44 dígitos) se extraída
-    if (pdfExtracted.chaveAcesso && !v.chaveAcesso) v.chaveAcesso = pdfExtracted.chaveAcesso;
-    if (pdfExtracted.lacreInpasa && !v.lacreInpasa) v.lacreInpasa = pdfExtracted.lacreInpasa;
+    if (pdfExtracted.chaveAcesso && !v.chaveAcesso)   v.chaveAcesso   = pdfExtracted.chaveAcesso;
+    if (pdfExtracted.lacreInpasa && !v.lacreInpasa)   v.lacreInpasa   = pdfExtracted.lacreInpasa;
+    if (pdfExtracted.temperatura && !v.temperatura)   v.temperatura   = pdfExtracted.temperatura;
     const volVal = document.getElementById('pe-volume')?.value.trim();
     if (volVal)   v.volume    = volVal;
     v.nfRetornoAt  = fmtDateTime();
@@ -3933,6 +3954,7 @@ async function processBatchTerminal(files) {
       row.lacre        = _lacreObj.lacre;
       row.lacreInpasa  = _lacreObj.lacreInpasa;
       row.chaveAcesso  = extractChaveAcesso(text);
+      row.temperatura  = extractTemperatura(text);
       row.pedidoNF     = extractPedido(text);
       row._text        = text;
       row._file        = file;
@@ -4194,6 +4216,7 @@ async function applyBatchTerminal() {
       if (r.lacre && !v.lacre)             { v.lacre       = r.lacre;       updates.lacre       = r.lacre; }
       if (r.chaveAcesso && !v.chaveAcesso) { v.chaveAcesso = r.chaveAcesso; updates.chaveAcesso = r.chaveAcesso; }
       if (r.lacreInpasa && !v.lacreInpasa) { v.lacreInpasa = r.lacreInpasa; updates.lacreInpasa = r.lacreInpasa; }
+      if (r.temperatura && !v.temperatura) { v.temperatura = r.temperatura; updates.temperatura = r.temperatura; }
       if (r._file) {
         v.nfRetornoFile = r._file.name;
         v.nfRetornoAt   = at;
