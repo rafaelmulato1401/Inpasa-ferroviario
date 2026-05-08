@@ -1770,6 +1770,7 @@ const ProgAPI = {
   },
 
 
+  async delete(id) {
     // Delete all vagoes and their pdfData subcollections
     const vSnap = await db.collection('programacoes').doc(id).collection('vagoes').get();
     for (const vDoc of vSnap.docs) {
