@@ -2336,7 +2336,22 @@ async function confirmDelete() {
 // ══════════════════════════════════════════
 // STATUS — 4 levels
 // ══════════════════════════════════════════
-function getStatusBadge(v) {
+// ── Badge de encoste com cor por ordem ───────────────────────────
+function encosteBadge(enc) {
+  if (!enc) return '<span style="color:var(--text-muted);font-size:10px;">—</span>';
+  const map = {
+    '1º Encoste': { bg:'#dcfce7', color:'#15803d', border:'#86efac', icon:'①' },
+    '2º Encoste': { bg:'#dbeafe', color:'1d4ed8',  border:'#93c5fd', icon:'②' },
+    '3º Encoste': { bg:'#fef9c3', color:'#a16207', border:'#fde047', icon:'③' },
+  };
+  const s = map[enc] || { bg:'#f3f4f6', color:'#374151', border:'#d1d5db', icon:'•' };
+  return `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:12px;
+    font-size:10px;font-weight:800;white-space:nowrap;
+    background:${s.bg};color:${s.color};border:1.5px solid ${s.border};">
+    ${s.icon} ${esc(enc)}
+  </span>`;
+}
+
   if (v.enviadoFaturamentoAt)     return '<span class="badge" style="background:#ede9f8;color:#5b21b6;">✈ Env. Faturamento</span>';
   if ((v.nfInpasa  ||'').trim())  return '<span class="badge b-concluido">Concluído</span>';
   if ((v.nfRetorno ||'').trim())  return '<span class="badge b-faturamento">Ag. faturamento</span>';
@@ -2575,7 +2590,7 @@ function renderTable() {
         // PROG ROW (without date and terminal cols — they are group headers now)
         html += `<tr class="row-prog">
           <td style="padding-left:32px;"><span class="expand-btn" onclick="toggleCollapse('${p.id}')">${arrow}</span>${esc(p.pedido)}${lockNote}</td>
-          <td>${p.encoste ? `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;background:#e0f2fe;color:#0369a1;">${esc(p.encoste)}</span>` : '<span style="color:var(--text-muted);font-size:10px;">—</span>'}</td>
+          <td>${encosteBadge(p.encoste)}</td>
           <td class="hide-mobile">${esc(p.produto)}</td>
           <td class="hide-mobile">${esc(p.usina)}</td>
           <td class="hide-mobile">${esc(p.cliente)}</td>
