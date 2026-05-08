@@ -3077,17 +3077,20 @@ function extractCnpjDestinatario(text) {
 }
 
 function extractLacre(text) {
+  // Helper: limpa pontos de milhar do lacre e retorna só dígitos
+  const cleanLacre = s => s.replace(/\./g, '').replace(/\s/g, '').trim();
+
   // Padrão 1 — Ultracargo: "LACRE 3553 / LAUDO..." — número antes da barra
-  let m = text.match(/LACRE\s+(\d{4,6})\s*\//i);
-  if (m) return m[1];
+  let m = text.match(/LACRE\s+([\d.]{4,12})\s*\//i);
+  if (m) return cleanLacre(m[1]);
 
-  // Padrão 2 — Teciap: "LACRE: 3462968" ou "LACRE:3462943"
-  m = text.match(/LACRE[:\s]+(\d{4,10})(?!\s*\/)/i);
-  if (m) return m[1];
+  // Padrão 2 — Teciap: "LACRE: 3.463.018" ou "LACRE:3462943"
+  m = text.match(/LACRE[:\s]+([\d.]{4,12})(?!\s*\/)/i);
+  if (m) return cleanLacre(m[1]);
 
-  // Padrão 3 — "Lacres: XXXX" (número, não vagão)
-  m = text.match(/Lacres?[:\s]+(\d{4,10})(?!\d{3})/i);
-  if (m) return m[1];
+  // Padrão 3 — "Lacres: XXXX" (número com ou sem pontos)
+  m = text.match(/Lacres?[:\s]+([\d.]{4,12})(?!\d{3})/i);
+  if (m) return cleanLacre(m[1]);
 
   return null;
 }
@@ -4361,7 +4364,10 @@ function extractFromCT(text) {
     const d = m[2].replace(/\D/g,'');
     return d.length === 7 ? m[1].toUpperCase() + d : null;
   })();
-  const lacre  = (t.match(/Lacre[s]?[:\s]+(\d{4,10})/i)||[])[1] || null;
+  const lacre  = (() => {
+    const m = t.match(/Lacre[s]?[:\s]+([\d.]{4,12})/i);
+    return m ? m[1].replace(/\./g,'').replace(/\s/g,'') : null;
+  })();
   const nf = (() => {
     const m = t.match(/Nota\(s\)\s*Fiscal\(is\)[:\s]*(\d+)/i) ||
               t.match(/Nº\s*\.?\s*(0*\d{5,9})\s*SÉRIE/i);
@@ -4391,9 +4397,9 @@ function extractFromNfInpasa(text) {
     return d.length === 7 ? m[1].toUpperCase() + d : null;
   })();
   const lacre = (() => {
-    const m = t.match(/LACRE\(?S?\)?\s*[:\s]+(\d{3,6})/i) ||
+    const m = t.match(/LACRE\(?S?\)?\s*[:\s]+([\d.]{3,12})/i) ||
               t.match(/LACRE\(?S?\)?\s*[:\s]+([\d\s]+\d)/i);
-    return m ? m[1].replace(/\s/g,'') : null;
+    return m ? m[1].replace(/\./g,'').replace(/\s/g,'') : null;
   })();
   return { nf, vagao, lacre };
 }
