@@ -1681,9 +1681,18 @@ const ProgAPI = {
     }));
     // Load vagoes subcollection for each prog
     await Promise.all(DB.programacoes.map(async p => {
-      const vSnap = await db.collection('programacoes').doc(p.id)
-        .collection('vagoes').orderBy('idx','asc').get();
+      let vSnap;
+      try {
+        vSnap = await db.collection('programacoes').doc(p.id)
+          .collection('vagoes').orderBy('idx','asc').get();
+      } catch(e) {
+        // Fallback: sem ordenação (vagões sem campo idx)
+        vSnap = await db.collection('programacoes').doc(p.id)
+          .collection('vagoes').get();
+      }
       p.vagoes = vSnap.docs.map(v => ({ vid: v.id, ...v.data() }));
+      // Garante ordenação local por idx quando disponível
+      p.vagoes.sort((a, b) => (a.idx ?? 999) - (b.idx ?? 999));
       // Ensure all vagao fields exist (without loading Base64 PDF data)
       p.vagoes = p.vagoes.map(v => ({
         vagao:'', nfRetorno:'', lacre:'', nfInpasa:'',
@@ -2379,20 +2388,23 @@ async function saveProg() {
         toast(`Programação atualizada. +${toAdd} vagão(s) adicionado(s).`);
 
       } else if (qtd < qtdAtual) {
-        // Remover apenas vagões sem dados (do final)
-        const vagoes = prog.vagoes;
+        // Snapshot do array antes de iterar (deleteVagao modifica prog.vagoes)
+        const snapshot = [...prog.vagoes];
         let removidos = 0;
-        for (let i = vagoes.length - 1; i >= qtd; i--) {
-          const v = vagoes[i];
-          const temDados = (v.vagao||'').trim() || (v.nfRetorno||'').trim() || (v.nfInpasa||'').trim() || (v.laudoFile||'').trim();
+        let bloqueado = false;
+        for (let i = snapshot.length - 1; i >= qtd; i--) {
+          const v = snapshot[i];
+          const temDados = (v.vagao||'').trim() || (v.nfRetorno||'').trim() ||
+                           (v.nfInpasa||'').trim() || (v.laudoFile||'').trim();
           if (temDados) {
-            toast(`⚠️ Vagão ${i+1} tem dados — não foi removido. Removidos: ${removidos} vagão(s).`, true);
+            bloqueado = true;
+            toast(`⚠️ Vagão ${i+1} tem dados — operação parada. ${removidos} vagão(s) removido(s).`, true);
             break;
           }
           if (v.vid) await ProgAPI.deleteVagao(editingProgId, v.vid);
           removidos++;
         }
-        if (removidos > 0 && removidos === qtdAtual - qtd) toast(`Programação atualizada. -${removidos} vagão(s) removido(s).`);
+        if (!bloqueado) toast(`Programação atualizada. -${removidos} vagão(s) removido(s).`);
 
       } else {
         toast('Programação atualizada.');
