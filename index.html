@@ -2864,6 +2864,9 @@ async function enviarFaturamento(progId, vagaoIdx) {
     `Encoste: ${prog.encoste||'—'}\n\n` +
     `--- VAGÃO ---\n` +
     `Vagão Nº: ${v.vagao||'—'}\n` +
+    `Transportadora: RUMO MALHA NORTES S.A\n` +
+    `COD CS: 3616\n` +
+    `CNPJ Transportadora: 24.962.466/0001-36\n` +
     `NF de Retorno: ${v.nfRetorno||'—'}\n` +
     (v.chaveAcesso ? `Chave de Acesso: ${v.chaveAcesso}\n` : '') +
     `Volume (L): ${v.volume||'—'}\n` +
@@ -4772,12 +4775,14 @@ async function nlProcessAll() {
               }
             }
           }
-          // 2º: Fallback sequencial — primeiro slot NF vazio em qualquer pedido do terminal
+          // 2º: Fallback sequencial — primeiro slot completamente vazio (sem nfInpasa E sem nfRetorno)
           if (row.vagaoIdx < 0) {
             outer_nf: for (const p of progsToSearch) {
               for (let vi = 0; vi < p.vagoes.length; vi++) {
                 const sk = p.id + '_' + vi;
-                if (!(p.vagoes[vi].nfInpasa||'').trim() && !_usedNfSlots[sk]) {
+                const v  = p.vagoes[vi];
+                // Slot válido: sem NF Inpasa E sem NF de Retorno (vagão nunca usado)
+                if (!(v.nfInpasa||'').trim() && !(v.nfRetorno||'').trim() && !_usedNfSlots[sk]) {
                   _usedNfSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
                   row.status = '✅ → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vagão ' + (vi+1);
                   break outer_nf;
