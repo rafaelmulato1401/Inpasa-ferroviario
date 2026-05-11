@@ -2915,11 +2915,16 @@ async function removePdf(progId, idx, type) {
         try { await db.collection('programacoes').doc(progId).collection('vagoes').doc(v.vid).collection('pdfData').doc('retorno').delete(); } catch(e){}
       }
       v.nfRetornoFile=null; v.nfRetornoFileObj=null; v.nfRetornoPath=null; v.nfRetornoUrl=null;
-      v.nfRetorno=''; v.vagao=''; v.lacre='';
+      v.nfRetorno=''; v.vagao=''; v.lacre=''; v.volume='';
+      // Campos extraídos do PDF — também limpar
+      v.temperatura=null; v.regua=null; v.lacreInpasa=null; v.chaveAcesso=null;
       // Reset faturamento status since PDF was removed
       v.enviadoFaturamentoAt = null;
       if (v.vid) {
-        try { await ProgAPI.updateVagao(progId, v.vid, { enviadoFaturamentoAt: null }); } catch(e){}
+        try { await ProgAPI.updateVagao(progId, v.vid, {
+          enviadoFaturamentoAt: null,
+          temperatura: null, regua: null, lacreInpasa: null, chaveAcesso: null, volume: '',
+        }); } catch(e){}
       }
     } else {
       if (v.vid) {
@@ -3039,8 +3044,8 @@ function extractVagaoNumber(text) {
     return d.length === 7 ? letters.toUpperCase() + d : null;
   }
 
-  // Padrão 1 — TECIAP: "PLACA: TCS-0994928" ou "PLACA: TCT-0345296"
-  const re1 = /PLACA[:\s]+([A-Z]{3})[\s\-](\d{5,7}(?:[\-]\d)?)/gi;
+  // Padrão 1 — TECIAP: "PLACA: TCS-0994928", "PLACA: TCT-0345296", "PLACA: TCT0533254"
+  const re1 = /PLACA[:\s]+([A-Z]{3})[\s\-]?(\d{5,7}(?:[\-]\d)?)/gi;
   let m;
   re1.lastIndex = 0;
   while ((m = re1.exec(text)) !== null) {
