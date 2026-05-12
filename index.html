@@ -2915,17 +2915,19 @@ async function removePdf(progId, idx, type) {
       if (v.vid) {
         try { await db.collection('programacoes').doc(progId).collection('vagoes').doc(v.vid).collection('pdfData').doc('retorno').delete(); } catch(e){}
       }
+      // Limpa TODOS os campos locais extraídos do PDF
       v.nfRetornoFile=null; v.nfRetornoFileObj=null; v.nfRetornoPath=null; v.nfRetornoUrl=null;
       v.nfRetorno=''; v.vagao=''; v.lacre=''; v.volume='';
-      // Campos extraídos do PDF — também limpar
       v.temperatura=null; v.regua=null; v.lacreInpasa=null; v.chaveAcesso=null;
-      // Reset faturamento status since PDF was removed
-      v.enviadoFaturamentoAt = null;
+      v.enviadoFaturamentoAt=null; v.nfRetornoAt=null;
+      // Persiste TODOS no Firestore
       if (v.vid) {
         try { await ProgAPI.updateVagao(progId, v.vid, {
+          nfRetorno: '', vagao: '', lacre: '', volume: '',
+          nfRetornoFile: null, nfRetornoPath: null, nfRetornoUrl: null, nfRetornoAt: null,
+          temperatura: null, regua: null, lacreInpasa: null, chaveAcesso: null,
           enviadoFaturamentoAt: null,
-          temperatura: null, regua: null, lacreInpasa: null, chaveAcesso: null, volume: '',
-        }); } catch(e){}
+        }); } catch(e){ console.error('removePdf updateVagao:', e); }
       }
     } else {
       if (v.vid) {
@@ -3898,13 +3900,9 @@ function renderPrevisao() {
   const ate = (document.getElementById('pv-filter-ate')?.value || '').trim();
 
   let items = PrevisaoAPI.list().slice();
-
-  // Filtro por data
   if (de)  items = items.filter(pv => pv.data >= de);
   if (ate) items = items.filter(pv => pv.data <= ate);
-
-  // Ordena por data asc, depois encoste
-  items.sort((a, b) => (a.data||'').localeCompare(b.data||'') || (a.encoste||'').localeCompare(b.encoste||''));
+  items.sort((a,b) => (a.data||'').localeCompare(b.data||'') || (a.terminal||'').localeCompare(b.terminal||'') || (a.encoste||'').localeCompare(b.encoste||''));
 
   if (!items.length) {
     tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma previsão cadastrada.</td></tr>';
@@ -3913,28 +3911,89 @@ function renderPrevisao() {
 
   const canEdit   = can('canEditPrevisao');
   const canDelete = can('canEditPrevisao');
+  let html = '';
 
-  tbody.innerHTML = items.map(pv => {
-    const dataFmt  = pv.data    ? fmtDate(pv.data)   : '—';
-    const horaFmt  = pv.hora    ? pv.hora             : '—';
-    const qtdFmt   = pv.qtd     ? pv.qtd              : '—';
-    const lancado  = pv.lancadoEm ? pv.lancadoEm      : '—';
-    const terminal = pv.terminal  ? ' · ' + esc(pv.terminal) : '';
+  // Agrupar: Data → Terminal → Encoste
+  const byData = {};
+  items.forEach(pv => {
+    const dk = pv.data || '—';
+    if (!byData[dk]) byData[dk] = {};
+    const tk = pv.terminal || '—';
+    if (!byData[dk][tk]) byData[dk][tk] = {};
+    const ek = pv.encoste || '—';
+    if (!byData[dk][tk][ek]) byData[dk][tk][ek] = [];
+    byData[dk][tk][ek].push(pv);
+  });
 
-    return '<tr>' +
-      '<td style="padding:10px 14px;font-size:12px;">' +
-        '<strong>' + esc(pv.encoste || '—') + '</strong>' +
-        '<span style="font-size:10px;color:var(--text-muted);margin-left:6px;">' + dataFmt + terminal + '</span>' +
-      '</td>' +
-      '<td style="padding:10px 14px;font-size:12px;">' + horaFmt + '</td>' +
-      '<td style="padding:10px 14px;font-size:12px;">' + qtdFmt + '</td>' +
-      '<td style="padding:10px 14px;font-size:11px;color:var(--text-muted);">' + lancado + '</td>' +
-      '<td style="padding:10px 14px;">' +
-        (canEdit   ? '<button class="icon-btn" title="Editar"  onclick="openPrevisaoModal(\'' + pv.id + '\')">✏️</button> ' : '') +
-        (canDelete ? '<button class="icon-btn" title="Excluir" onclick="openDeletePrevisao(\'' + pv.id + '\')">🗑️</button>' : '') +
-      '</td>' +
-    '</tr>';
-  }).join('');
+  Object.entries(byData).forEach(([data, terminals]) => {
+    const dKey = 'pvd_' + data;
+    const dOpen = _pvGroupState[dKey] !== false; // default aberto
+    const dQtd  = Object.values(terminals).flatMap(t => Object.values(t).flat()).reduce((s,pv) => s+(parseInt(pv.qtd)||0), 0);
+
+    // Linha de DATA
+    html += `<tr onclick="togglePvGroup('${dKey}')" style="cursor:pointer;background:#1a3a6b;color:#fff;user-select:none;">
+      <td colspan="5" style="padding:9px 14px;font-size:12px;font-weight:800;letter-spacing:.3px;">
+        <span style="margin-right:8px;">${dOpen?'▼':'▶'}</span>
+        📅 ${fmtDate(data)}
+        <span style="margin-left:12px;font-size:10px;font-weight:400;opacity:.75;">${dQtd} vagões previstos</span>
+      </td>
+    </tr>`;
+
+    if (!dOpen) return;
+
+    Object.entries(terminals).forEach(([terminal, encosteMap]) => {
+      const tKey = 'pvt_' + data + '_' + terminal;
+      const tOpen = _pvGroupState[tKey] !== false;
+      const tQtd  = Object.values(encosteMap).flat().reduce((s,pv) => s+(parseInt(pv.qtd)||0), 0);
+
+      // Linha de TERMINAL
+      html += `<tr onclick="togglePvGroup('${tKey}')" style="cursor:pointer;background:#2d4e8a;color:#fff;user-select:none;">
+        <td colspan="5" style="padding:7px 14px 7px 28px;font-size:11px;font-weight:700;">
+          <span style="margin-right:8px;">${tOpen?'▼':'▶'}</span>
+          🚉 ${esc(terminal)}
+          <span style="margin-left:10px;font-size:10px;font-weight:400;opacity:.75;">${tQtd} vagões</span>
+        </td>
+      </tr>`;
+
+      if (!tOpen) return;
+
+      Object.entries(encosteMap).forEach(([encoste, pvList]) => {
+        const eKey = 'pve_' + data + '_' + terminal + '_' + encoste;
+        const eOpen = _pvGroupState[eKey] !== false;
+        const eQtd  = pvList.reduce((s,pv) => s+(parseInt(pv.qtd)||0), 0);
+
+        // Linha de ENCOSTE
+        html += `<tr onclick="togglePvGroup('${eKey}')" style="cursor:pointer;background:#e8eef8;user-select:none;">
+          <td colspan="5" style="padding:6px 14px 6px 44px;font-size:11px;font-weight:700;color:#1a3a6b;">
+            <span style="margin-right:8px;">${eOpen?'▼':'▶'}</span>
+            ${encosteBadge(encoste)}
+            <span style="margin-left:10px;font-size:10px;font-weight:400;color:var(--text-muted);">${eQtd} vagões previstos</span>
+          </td>
+        </tr>`;
+
+        if (!eOpen) return;
+
+        // Linhas de PREVISÃO individuais
+        pvList.forEach(pv => {
+          html += `<tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px 14px 8px 60px;font-size:11px;">
+              <strong>${esc(pv.encoste||'—')}</strong>
+              <span style="font-size:10px;color:var(--text-muted);margin-left:6px;">${fmtDate(data)} · ${esc(terminal)}</span>
+            </td>
+            <td style="padding:8px 12px;font-size:12px;">${pv.hora||'—'}</td>
+            <td style="padding:8px 12px;font-size:12px;">${pv.qtd||'—'}</td>
+            <td style="padding:8px 12px;font-size:11px;color:var(--text-muted);">${pv.lancadoEm||'—'}</td>
+            <td style="padding:8px 12px;">
+              ${canEdit   ? `<button class="icon-btn" title="Editar"  onclick="openPrevisaoModal('${pv.id}')">✏️</button> ` : ''}
+              ${canDelete ? `<button class="icon-btn" title="Excluir" onclick="openDeletePrevisao('${pv.id}')">🗑️</button>` : ''}
+            </td>
+          </tr>`;
+        });
+      });
+    });
+  });
+
+  tbody.innerHTML = html;
 }
 
 function togglePvGroup(key) { _pvGroupState[key] = !_pvGroupState[key]; renderPrevisao(); }
@@ -4771,6 +4830,8 @@ async function nlProcessAll() {
       if (type === 'nf') {
         const data = extractFromNfInpasa(text);
         row.nf = data.nf; row.vagao = data.vagao; row.lacre = data.lacre;
+        // Extrai também o pedido interno (ex: "PEDIDO INTERNO: 171032")
+        const pedidoInpasa = extractPedido(text);
         // Checagem de duplicata em TODOS os pedidos do sistema
         if (row.nf) {
           let dup = false;
@@ -4789,34 +4850,49 @@ async function nlProcessAll() {
           }
         }
         if (!row.duplicate) {
-          // 1º: Tenta por placa em TODOS os pedidos do terminal/data
+          // REGRA: NF Inpasa só vai em vagão que JÁ TEM nfRetorno preenchida
+          //        e ainda NÃO tem nfInpasa — dentro da data/terminal do modal
+
+          // P1: Por placa — principal e preferencial
           if (row.vagao) {
             for (const p of progsToSearch) {
               const vi = findVagaoByPlate(p, row.vagao);
+              if (vi < 0) continue;
               const sk = p.id + '_' + vi;
-              if (vi >= 0 && !_usedNfSlots[sk] && !(p.vagoes[vi].nfInpasa||'').trim()) {
+              const v  = p.vagoes[vi];
+              // Slot válido: tem nfRetorno E não tem nfInpasa ainda
+              if ((v.nfRetorno||'').trim() && !(v.nfInpasa||'').trim() && !_usedNfSlots[sk]) {
                 _usedNfSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
-                row.status = '✅ Vagão ' + row.vagao + ' → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vg.' + (vi+1);
+                row.status = '✅ Vagão ' + row.vagao + ' → Ped.' + (p.pedido||p.id.slice(-4)) + ' Vg.' + (vi+1);
                 break;
               }
             }
           }
-          // 2º: Fallback sequencial — primeiro slot completamente vazio (sem nfInpasa E sem nfRetorno)
-          if (row.vagaoIdx < 0) {
-            outer_nf: for (const p of progsToSearch) {
+
+          // P2: Por pedido interno — quando placa não está salva no vagão
+          if (row.vagaoIdx < 0 && pedidoInpasa) {
+            for (const p of progsToSearch) {
+              if (String(p.pedido).trim() !== String(pedidoInpasa).trim()) continue;
               for (let vi = 0; vi < p.vagoes.length; vi++) {
                 const sk = p.id + '_' + vi;
                 const v  = p.vagoes[vi];
-                // Slot válido: sem NF Inpasa E sem NF de Retorno (vagão nunca usado)
-                if (!(v.nfInpasa||'').trim() && !(v.nfRetorno||'').trim() && !_usedNfSlots[sk]) {
+                // Slot válido: tem nfRetorno E não tem nfInpasa
+                if ((v.nfRetorno||'').trim() && !(v.nfInpasa||'').trim() && !_usedNfSlots[sk]) {
                   _usedNfSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
-                  row.status = '✅ → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vagão ' + (vi+1);
-                  break outer_nf;
+                  row.status = '✅ Ped.' + p.pedido + ' → Vagão ' + (vi+1);
+                  break;
                 }
               }
+              if (row.vagaoIdx >= 0) break;
             }
           }
-          if (row.vagaoIdx < 0) row.status = '❌ Sem vagão disponível para NF Inpasa';
+
+          // Sem match — informa que não há vagão com NF de retorno disponível
+          if (row.vagaoIdx < 0) {
+            row.status = row.vagao
+              ? '❌ Vagão ' + row.vagao + ' não encontrado ou sem NF de Retorno nesta programação'
+              : '❌ Sem vagão com NF de Retorno disponível para NF Inpasa';
+          }
         }
       } else {
         // Laudo CQ
