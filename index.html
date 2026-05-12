@@ -2177,6 +2177,7 @@ async function initApp() {
 
   document.getElementById('btn-nova').style.display     = can('canCreateProg')     ? 'flex' : 'none';
   // Per-row download buttons are controlled in renderTable — no global buttons
+  document.getElementById('tab-previsao').style.display  = can('canViewPrevisao')    ? 'flex' : 'none';
   document.getElementById('tab-users').style.display    = can('canManageUsers')     ? 'flex' : 'none';
   document.getElementById('tab-profiles').style.display = can('canManageProfiles')  ? 'flex' : 'none';
   document.getElementById('tab-descargas').style.display = (currentUser?.role === 'master') ? 'flex' : 'none';
@@ -4171,8 +4172,7 @@ async function processBatchTerminal(files) {
         }
       }
 
-      // Prioridade 3: CNPJ emissora da NF → identifica filial para pré-filtrar select manual
-      // NÃO aloca automaticamente — exige escolha explícita do usuário
+      // Prioridade 3: CNPJ emissora → identifica filial e aloca no primeiro slot vazio
       if (row.vagaoIdx < 0 && !row.duplicate) {
         const cnpjsNaNF  = extractAllCnpjs(row._text || '');
         const allFilials = Object.entries(FILIAL_CNPJ);
@@ -4182,8 +4182,29 @@ async function processBatchTerminal(files) {
         }
         if (usinaMatch) {
           const filialCurta = usinaMatch.split('/')[1]?.trim() || usinaMatch;
-          row._usinaMatch = usinaMatch; // usado para pré-filtrar o select
-          row.status = `⚠️ Filial ${filialCurta} identificada — selecione o vagão`;
+          row._usinaMatch = usinaMatch;
+          const normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+          const progsFilial = allProgs.filter(p => normalize(p.usina||'') === normalize(usinaMatch));
+          // Tenta alocar automaticamente no primeiro slot vazio da filial
+          let alocado = false;
+          for (const p of progsFilial) {
+            for (let vi = 0; vi < p.vagoes.length; vi++) {
+              const v = p.vagoes[vi];
+              const slotKey = `${p.id}_${vi}`;
+              if (!(v.nfRetorno||'').trim() && !_usedSlots[slotKey]) {
+                _usedSlots[slotKey] = true;
+                row.progId = p.id; row.vagaoIdx = vi;
+                row.status = `✅ Filial ${filialCurta} → Ped.${p.pedido} Vagão ${vi+1}`;
+                alocado = true;
+                break;
+              }
+            }
+            if (alocado) break;
+          }
+          // Se não achou slot vazio, pede seleção manual
+          if (!alocado) {
+            row.status = `⚠️ Filial ${filialCurta} identificada — selecione o vagão`;
+          }
         }
       }
 
