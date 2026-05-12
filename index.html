@@ -2739,15 +2739,17 @@ function renderTable() {
 
         const retHtml = hasRet
           ? `<div class="pdf-file-row">
-               <button class="pdf-btn has-file" ${!canUR?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'retorno')" title="${esc(v.nfRetornoFile)}">📎 PDF</button>
-               ${canDelRetorno?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'retorno')" title="Remover PDF (Master)">✕</span>`:''}
+               <button class="pdf-btn has-file" onclick="StorageAPI.downloadPdf('${p.id}','${v.vid}','retorno','${esc(v.nfRetornoFile)}')" title="Baixar: ${esc(v.nfRetornoFile)}">📥 PDF</button>
+               ${canUR?`<span class="pdf-remove" onclick="triggerPdfUpload('${p.id}',${i},'retorno')" title="Substituir PDF" style="cursor:pointer;font-size:11px;padding:0 3px;">🔄</span>`:''}
+               ${canDelRetorno?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'retorno')" title="Remover PDF">✕</span>`:''}
              </div>`
           : `<button class="pdf-btn" ${!canUR?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'retorno')">📎 Anexar</button>`;
 
         const inpHtml = hasInp
           ? `<div class="pdf-file-row">
-               <button class="pdf-btn has-file" ${!canUI?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'inpasa')" title="${esc(v.nfInpasaFile)}">📎 PDF</button>
-               ${canDelInpasa?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'inpasa')" title="Remover PDF (Master)">✕</span>`:''}
+               <button class="pdf-btn has-file" onclick="StorageAPI.downloadPdf('${p.id}','${v.vid}','inpasa','${esc(v.nfInpasaFile)}')" title="Baixar: ${esc(v.nfInpasaFile)}">📥 PDF</button>
+               ${canUI?`<span class="pdf-remove" onclick="triggerPdfUpload('${p.id}',${i},'inpasa')" title="Substituir PDF" style="cursor:pointer;font-size:11px;padding:0 3px;">🔄</span>`:''}
+               ${canDelInpasa?`<span class="pdf-remove" onclick="removePdf('${p.id}',${i},'inpasa')" title="Remover PDF">✕</span>`:''}
              </div>`
           : `<button class="pdf-btn" ${!canUI?'disabled':''} onclick="triggerPdfUpload('${p.id}',${i},'inpasa')">📎 Anexar</button>`;
 
@@ -2787,7 +2789,8 @@ function renderTable() {
             ${(can('canUploadInpasa')||can('canManageUsers')) ? `<div class="pdf-cell">
               ${v.laudoFile
                 ? `<div class="pdf-file-row">
-                    <button class="doc-btn has-file" onclick="triggerDocUpload('${p.id}','laudo',${i})" title="${esc(v.laudoFile)}">📋 Laudo</button>
+                    <button class="doc-btn has-file" onclick="StorageAPI.downloadPdf('${p.id}','${v.vid}','laudo','${esc(v.laudoFile)}')" title="Baixar: ${esc(v.laudoFile)}">📥 Laudo</button>
+                    ${can('canUploadInpasa')||can('canManageUsers') ? `<span class="pdf-remove" onclick="triggerDocUpload('${p.id}','laudo',${i})" title="Substituir Laudo" style="cursor:pointer;font-size:11px;padding:0 3px;">🔄</span>` : ''}
                     ${can('canManageUsers') ? `<span class="pdf-remove" onclick="removeVagaoDoc('${p.id}',${i},'laudo')" title="Remover">✕</span>` : ''}
                    </div>
                    ${v.laudoAt ? `<div style="font-size:9px;color:var(--text-muted);">📅 ${v.laudoAt}</div>` : ''}`
