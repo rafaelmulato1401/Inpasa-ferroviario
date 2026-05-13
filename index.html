@@ -4924,19 +4924,21 @@ async function nlProcessAll() {
           for (const p of progsToSearch) {
             const vi = findVagaoByPlate(p, row.vagao);
             const sk = p.id + '_' + vi;
-            if (vi >= 0 && !_usedLaudoSlots[sk] && !p.vagoes[vi].laudoFile) {
+            if (vi >= 0 && !_usedLaudoSlots[sk] && !p.vagoes[vi].laudoFile && (p.vagoes[vi].nfRetorno||'').trim()) {
               _usedLaudoSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
               row.status = '✅ Vagão ' + row.vagao + ' → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vg.' + (vi+1);
               break;
             }
           }
         }
-        // 2º: Fallback sequencial — primeiro slot laudo vazio
+        // 2º: Fallback sequencial — primeiro slot com nfRetorno mas sem laudo
         if (row.vagaoIdx < 0) {
           outer_laudo: for (const p of progsToSearch) {
             for (let vi = 0; vi < p.vagoes.length; vi++) {
               const sk = p.id + '_' + vi;
-              if (!p.vagoes[vi].laudoFile && !_usedLaudoSlots[sk]) {
+              const v  = p.vagoes[vi];
+              // Laudo só vai em vagão que já tem NF de retorno
+              if ((v.nfRetorno||'').trim() && !v.laudoFile && !_usedLaudoSlots[sk]) {
                 _usedLaudoSlots[sk] = true; row.vagaoIdx = vi; row.progId = p.id;
                 row.status = '✅ → Pedido ' + (p.pedido||p.id.slice(-4)) + ' Vagão ' + (vi+1);
                 break outer_laudo;
@@ -4967,7 +4969,7 @@ async function nlProcessAll() {
             '<option value="">Selecionar vagão...</option>' +
             (_nlAllProgs.length > 0 ? _nlAllProgs : [ProgAPI.list().find(p=>p.id===_nlProgId)].filter(Boolean)).flatMap((p) =>
               (p.vagoes||[]).map((v,vi) =>
-                '<option value="' + p.id + '__' + vi + '">Ped.' + (p.pedido||p.id.slice(-4)) + ' Vagão ' + (vi+1) + (v.vagao?' ('+v.vagao+')':'') + '</option>'
+                '<option value="' + p.id + '|' + vi + '">Ped.' + (p.pedido||p.id.slice(-4)) + ' Vagão ' + (vi+1) + (v.vagao?' ('+v.vagao+')':'') + '</option>'
               )
             ).join('') +
           '</select>' : '')
