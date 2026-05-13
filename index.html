@@ -2646,7 +2646,7 @@ function renderTable() {
 
     // DATE GROUP ROW
     html += `<tr class="row-group-date" onclick="toggleGroupState('${dateKey}')">
-      <td colspan="17">
+      <td colspan="14">
         <span style="margin-right:8px;font-size:13px;">${dateArrow}</span>
         📅 ${fmtDate(date)}
         <span style="margin-left:16px;font-size:11px;font-weight:400;opacity:.8;">
@@ -2667,7 +2667,7 @@ function renderTable() {
       // TERMINAL GROUP ROW
       const termProgIds = termProgs.map(p => p.id).join(',');
       html += `<tr class="row-group-terminal" onclick="toggleGroupState('${termKey}')">
-        <td colspan="17" style="display:flex;align-items:center;justify-content:space-between;">
+        <td colspan="14" style="display:flex;align-items:center;justify-content:space-between;">
           <div>
             <span style="margin-left:16px;margin-right:8px;">${termArrow}</span>
             🚉 <span class="terminal-badge" style="margin:0 8px;">${esc(termName)}</span>
@@ -4766,7 +4766,7 @@ function openNfLaudoModal(progId) {
       p.terminal === origem.terminal && p.data === origem.data
     );
   } else {
-    _nlAllProgs = origem ? [origem] : [];
+    _nlAllProgs = [ProgAPI.list().find(p => p.id === progId)].filter(Boolean);
   }
 
   document.getElementById('nl-nf-count').textContent    = '';
@@ -4969,12 +4969,13 @@ async function nlProcessAll() {
 
 function nlManualSelect(idx, value) {
   if (!value) return;
-  // value pode ser "progId__vi" (novo formato multi-pedido) ou só "vi" (legado)
-  if (value.includes('__')) {
-    const [pid, vi] = value.split('__');
+  // value formato "progId|vi" (pipe)
+  if (value.includes('|')) {
+    const [pid, vi] = value.split('|');
     _nlResults[idx].progId   = pid;
     _nlResults[idx].vagaoIdx = parseInt(vi);
   } else {
+    // legado: só índice
     _nlResults[idx].vagaoIdx = parseInt(value);
     _nlResults[idx].progId   = _nlProgId;
   }
