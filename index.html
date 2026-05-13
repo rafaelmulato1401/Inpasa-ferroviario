@@ -1706,6 +1706,9 @@ const ProgAPI = {
         enviadoFaturamentoAt:null,
         ...v
       }));
+      // Sincroniza qtd local com a contagem real de vagões
+      // (evita divergência visual quando vagões foram adicionados/removidos)
+      p.qtd = p.vagoes.length;
       // Init ficha fields on prog
       if (!('fichaFile' in p)) { p.fichaFile = null; p.fichaAt = null; p.fichaFileObj = null; }
     }));
@@ -1896,10 +1899,14 @@ const StorageAPI = {
 
   // Abre/faz download do PDF direto no navegador
   async downloadPdf(progId, vid, type, fileName) {
+    if (!vid || vid === 'undefined') {
+      toast('PDF não disponível — vagão sem ID. Recarregue a página e tente novamente.', true);
+      return;
+    }
     showLoading('Carregando PDF...');
     try {
       const blob = await this.getPdfBlob(progId, vid, type);
-      if (!blob) { toast('PDF não encontrado.', true); return; }
+      if (!blob) { toast('PDF não encontrado no servidor.', true); return; }
       const url = URL.createObjectURL(blob);
       const a   = document.createElement('a');
       a.href     = url;
@@ -1908,6 +1915,8 @@ const StorageAPI = {
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 3000);
+    } catch(e) {
+      toast('Erro ao baixar PDF: ' + e.message, true);
     } finally { hideLoading(); }
   }
 };
@@ -2355,7 +2364,7 @@ function openProgModal(progId=null) {
     fVagoesNew.readOnly = false;
     fVagoesNew.style.cssText = '';
     const oldHint = document.getElementById('f-vagoes-hint');
-    if (oldHint) oldHint.textContent = '';
+    if (oldHint) oldHint.remove();
   }
   openModal('modal-prog');
 }
@@ -2642,7 +2651,7 @@ function renderTable() {
     const dateArrow     = dateCollapsed ? '▶' : '▼';
     const terminals     = byDate[date];
     const totalProgs    = Object.values(terminals).flat().length;
-    const totalVagoes   = Object.values(terminals).flat().reduce((s,p) => s+p.qtd, 0);
+    const totalVagoes   = Object.values(terminals).flat().reduce((s,p) => s+(p.vagoes?.length||p.qtd||0), 0);
 
     // DATE GROUP ROW
     html += `<tr class="row-group-date" onclick="toggleGroupState('${dateKey}')">
@@ -2662,7 +2671,7 @@ function renderTable() {
       const termCollapsed = getGroupState(termKey);
       const termArrow     = termCollapsed ? '▶' : '▼';
       const termProgs     = terminals[termName];
-      const termVagoes    = termProgs.reduce((s,p) => s+p.qtd, 0);
+      const termVagoes    = termProgs.reduce((s,p) => s+(p.vagoes?.length||p.qtd||0), 0);
 
       // TERMINAL GROUP ROW
       const termProgIds = termProgs.map(p => p.id).join(',');
@@ -2699,7 +2708,7 @@ function renderTable() {
           <td class="hide-mobile">${esc(p.usina)}</td>
           <td class="hide-mobile">${esc(p.cliente)}</td>
           <td class="hide-mobile">${esc(p.local)}</td>
-          <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;"><span style="background:#e8eef8;color:#1a3a6b;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-right:8px;">${p.qtd} vag.</span>${p.collapsed?'Clique na seta para expandir':''}</td>
+          <td colspan="7" style="font-weight:400;color:var(--text-muted);font-size:10px;"><span style="background:#e8eef8;color:#1a3a6b;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-right:8px;">${p.vagoes?.length||p.qtd||0} vag.</span>${p.collapsed?'Clique na seta para expandir':''}</td>
           <td></td>
           <td>
             <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start;padding:2px 0;">
@@ -2933,11 +2942,20 @@ async function removePdf(progId, idx, type) {
         }); } catch(e){ console.error('removePdf updateVagao:', e); }
       }
     } else {
+      // Remove pdfData do Firestore
       if (v.vid) {
         try { await db.collection('programacoes').doc(progId).collection('vagoes').doc(v.vid).collection('pdfData').doc('inpasa').delete(); } catch(e){}
       }
+      // Limpa localmente
       v.nfInpasaFile=null; v.nfInpasaFileObj=null; v.nfInpasaPath=null; v.nfInpasaUrl=null;
-      v.nfInpasa='';
+      v.nfInpasa=''; v.nfInpasaAt=null;
+      // Persiste no Firestore
+      if (v.vid) {
+        try { await ProgAPI.updateVagao(progId, v.vid, {
+          nfInpasa: '', nfInpasaFile: null, nfInpasaPath: null,
+          nfInpasaUrl: null, nfInpasaAt: null,
+        }); } catch(e){ console.error('removePdf inpasa updateVagao:', e); }
+      }
     }
     await saveVagaoField(progId, idx);
     renderTable(); toast('PDF removido. Campos limpos.');
