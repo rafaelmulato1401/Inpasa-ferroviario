@@ -5659,7 +5659,7 @@ function dcParseLogum(headers, rows) {
     regua:       r[10] ?? 0,
     tempAmostra: r[26] ?? 0,
     dens20:      r[25] ?? 0,
-    vol20:       parseFloat(String(r[17] ?? '0').replace(',', '.')) || 0,
+    vol20:       parseFloat(String(r[17] ?? '0').replace(/\./g, '').replace(',', '.')) || 0,
   })).filter(r => r.nf);
 }
 
@@ -5672,7 +5672,7 @@ function dcParseOpla(headers, rows) {
     regua:       r[10] ?? 0,
     tempAmostra: r[26] ?? 0,
     dens20:      r[25] ?? 0,
-    vol20:       parseFloat(String(r[17] ?? '0').replace(',', '.')) || 0,
+    vol20:       parseFloat(String(r[17] ?? '0').replace(/\./g, '').replace(',', '.')) || 0,
   })).filter(r => r.nf);
 }
 
@@ -5685,7 +5685,7 @@ function dcParseTercom(headers, rows) {
     regua:       0,
     tempAmostra: 0,
     dens20:      0,
-    vol20:       parseFloat(String(r[25] ?? '0').replace(',', '.')) || 0,
+    vol20:       parseFloat(String(r[25] ?? '0').replace(/\./g, '').replace(',', '.')) || 0,
   })).filter(r => r.nf);
 }
 
