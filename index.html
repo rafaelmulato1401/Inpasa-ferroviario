@@ -2833,7 +2833,7 @@ function renderTable() {
                 </span>
                 ${v.descIndice != null && v.descIndice !== '0' ? `
                 <br><span style="font-weight:700;color:${parseFloat(v.descIndice||0)>=0?'#166534':'#b91c1c'};">
-                  Índice: ${parseFloat(v.descIndice)>=0?'+':''}${Number(v.descIndice).toLocaleString('pt-BR',{minimumFractionDigits:4,maximumFractionDigits:4})}%
+                  Índice: ${parseFloat(v.descIndice)>=0?'+':''}${Number(v.descIndice).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}%
                 </span>` : ''}
               </div>` : ''}
           </td>
@@ -5619,7 +5619,7 @@ function dcReadXlsx(file, sheetName, headerRow = 0) {
         const sn  = wb.SheetNames.find(s => s.trim().toUpperCase() === sheetName.toUpperCase());
         if (!sn) { reject(new Error(`Aba "${sheetName}" não encontrada. Abas: ${wb.SheetNames.join(', ')}`)); return; }
         const ws  = wb.Sheets[sn];
-        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'dd/mm/yyyy' });
+        const raw = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, dateNF: 'dd/mm/yyyy' });
         // Usa a linha headerRow como cabeçalho
         const headers = raw[headerRow] || [];
         const rows = raw.slice(headerRow + 1).filter(r => r.some(v => v !== '' && v != null));
@@ -5640,9 +5640,16 @@ function dcNormNF(v) {
 // ── Formatar data ────────────────────────────────────────────────
 function dcFmtDate(v) {
   if (!v) return '';
-  // Se já é string dd/mm/yyyy
-  if (typeof v === 'string' && /\d{2}\/\d{2}\/\d{4}/.test(v)) return v.substring(0,10);
-  // Tenta converter
+  // Número serial do Excel (raw:true) — ex: 46000
+  if (typeof v === 'number') {
+    // Excel epoch: 1 = 01/01/1900, com bug do ano bissexto 1900
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    if (!isNaN(d)) return d.toLocaleDateString('pt-BR');
+  }
+  // String dd/mm/yyyy
+  if (typeof v === 'string' && /\d{2}\/\d{2}\/\d{4}/.test(v)) return v.substring(0, 10);
+  // Objeto Date (não deve ocorrer com raw:true, mas por segurança)
+  if (v instanceof Date) return v.toLocaleDateString('pt-BR');
   const d = new Date(v);
   if (!isNaN(d)) return d.toLocaleDateString('pt-BR');
   return String(v).substring(0, 10);
@@ -5758,7 +5765,7 @@ async function dcProcessAll() {
 
     // índice = (deltaVol / volNF) * 100  (positivo = sobra %, negativo = perda %)
     const indice = (deltaVol !== null && volNF > 0)
-      ? parseFloat(((deltaVol / volNF) * 100).toFixed(4))
+      ? parseFloat(((deltaVol / volNF) * 100).toFixed(2))
       : null;
 
     if (vagaoFound) matched++;
