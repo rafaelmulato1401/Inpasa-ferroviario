@@ -2823,14 +2823,18 @@ function renderTable() {
               </div>`
             : ''}
             ${v.descTerminal ? `
-              <div style="margin-top:5px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:4px 7px;font-size:9px;line-height:1.5;">
+              <div style="margin-top:5px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:4px 7px;font-size:9px;line-height:1.6;">
                 <span style="font-weight:800;color:#166534;">⚓ ${v.descTerminal}</span><br>
                 <span style="color:#15803d;">📅 ${v.descDataChegada||'—'}</span>
                 ${v.descRegua && v.descRegua!=='0' ? `<span style="color:#15803d;margin-left:4px;">📏 ${v.descRegua}</span>` : ''}
                 <br><span style="color:#15803d;">🧪 ${v.descVol20 ? Number(v.descVol20).toLocaleString('pt-BR')+' L' : '—'}</span>
                 <span style="font-weight:700;margin-left:4px;color:${parseFloat(v.descDeltaVol||0)>=0?'#166534':'#b91c1c'};">
-                  Δ ${v.descDeltaVol != null ? (parseFloat(v.descDeltaVol)>=0?'+':'')+Number(v.descDeltaVol).toLocaleString('pt-BR')+'L' : '—'}
+                  ${parseFloat(v.descDeltaVol||0)>=0?'▲ Sobra':'▼ Perda'}: ${v.descDeltaVol != null ? (parseFloat(v.descDeltaVol)>=0?'+':'')+Number(v.descDeltaVol).toLocaleString('pt-BR')+'L' : '—'}
                 </span>
+                ${v.descIndice != null && v.descIndice !== '0' ? `
+                <br><span style="font-weight:700;color:${parseFloat(v.descIndice||0)>=0?'#166534':'#b91c1c'};">
+                  Índice: ${parseFloat(v.descIndice)>=0?'+':''}${Number(v.descIndice).toLocaleString('pt-BR',{minimumFractionDigits:4,maximumFractionDigits:4})}%
+                </span>` : ''}
               </div>` : ''}
           </td>
           <td></td><!-- Ações+Fichas: vazio na linha de vagão -->
@@ -5740,8 +5744,22 @@ async function dcProcessAll() {
       }
     }
 
-    const volNF  = vagaoFound ? (parseFloat(String(vagaoFound.volume || '0').replace(',','.')) || 0) : 0;
-    const deltaVol = row.vol20 && volNF ? (row.vol20 - volNF) : null;
+    // volNF: volume da NF de retorno salvo em litros (ex: "102275" ou "102.275")
+    // Remove pontos de milhar e vírgulas antes do parseFloat
+    const volNF = vagaoFound
+      ? (parseFloat(String(vagaoFound.volume || '0').replace(/\./g, '').replace(',', '.')) || 0)
+      : 0;
+
+    // vol20 vem da planilha de descarga em litros (já é número)
+    const vol20 = row.vol20 ? parseFloat(String(row.vol20).replace(/\./g, '').replace(',', '.')) : null;
+
+    // deltaVol = vol descargado - vol NF (positivo = sobra, negativo = perda)
+    const deltaVol = (vol20 && volNF) ? Math.round(vol20 - volNF) : null;
+
+    // índice = (deltaVol / volNF) * 100  (positivo = sobra %, negativo = perda %)
+    const indice = (deltaVol !== null && volNF > 0)
+      ? parseFloat(((deltaVol / volNF) * 100).toFixed(4))
+      : null;
 
     if (vagaoFound) matched++;
     else unmatched++;
@@ -5753,7 +5771,9 @@ async function dcProcessAll() {
       vagaoNum:  vagaoFound?.vagao || '—',
       vagaoIdx,
       volNF,
+      vol20,
       deltaVol,
+      indice,
       status:    vagaoFound ? 'vinculado' : 'não encontrado',
     };
   });
@@ -5819,7 +5839,8 @@ async function dcApplyAll() {
         descTempAmostra: String(r.tempAmostra ?? '0'),
         descDens20:      String(r.dens20  ?? '0'),
         descVol20:       String(r.vol20   ?? '0'),
-        descDeltaVol:    r.deltaVol != null ? String(Math.round(r.deltaVol)) : '0',
+        descDeltaVol:    r.deltaVol != null ? String(r.deltaVol) : '0',
+        descIndice:      r.indice   != null ? String(r.indice)   : '0',
         descAtualizadoEm: at,
       };
 
