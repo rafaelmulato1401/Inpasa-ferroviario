@@ -2043,12 +2043,19 @@ const FILIAL_CNPJ = {
 function getExpectedCnpj(progId) {
   const prog = ProgAPI.list().find(p => p.id === progId);
   if (!prog || !prog.usina) return null;
-  // Normaliza: remove acentos, múltiplos espaços e compara
   const normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
                            .replace(/\s+/g,' ').trim().toUpperCase();
   const usinaNorm = normalize(prog.usina);
+  // Tentativa 1: match exato normalizado
   for (const [key, cnpj] of Object.entries(FILIAL_CNPJ)) {
     if (normalize(key) === usinaNorm) return cnpj;
+  }
+  // Tentativa 2: fallback por cidade (parte após "/") — cobre variações de escrita
+  const cidade = usinaNorm.split('/').pop().trim();
+  if (cidade.length >= 4) {
+    for (const [key, cnpj] of Object.entries(FILIAL_CNPJ)) {
+      if (normalize(key).includes(cidade)) return cnpj;
+    }
   }
   return null;
 }
@@ -3293,6 +3300,30 @@ function extractRegua(text) {
   return m[1].replace(/[.,\s]+$/, '').trim();
 }
 
+function extractDataNF(text) {
+  // Formato "DATA DA EMISSÃO" ou "DATA DA EMISSAO" ou "DATA EMISSAO"
+  // Padrões: "07/05/2026", "07.05.2026", "2026-05-07"
+  const patterns = [
+    /DATA\s*D[AE]\s*EMISS[ÃA]O[:\s]*([\d]{2}[\/\.]\d{2}[\/\.]\d{4})/i,
+    /DATA\s*EMISS[ÃA]O[:\s]*([\d]{2}[\/\.]\d{2}[\/\.]\d{4})/i,
+    /DATA\s*D[AE]\s*SA[IÍ]DA[:\s]*([\d]{2}[\/\.]\d{2}[\/\.]\d{4})/i,
+    /EMISS[ÃA]O[:\s]*([\d]{2}[\/\.]\d{2}[\/\.]\d{4})/i,
+    /(\d{2}[\/\.]\d{2}[\/\.]\d{4})/,  // fallback: primeira data encontrada
+  ];
+  for (const pat of patterns) {
+    const m = text.match(pat);
+    if (m) {
+      // Normaliza para YYYY-MM-DD
+      const parts = m[1].replace(/\./g,'/').split('/');
+      if (parts.length === 3) {
+        const [d, mo, y] = parts;
+        return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;
+      }
+    }
+  }
+  return null;
+}
+
 async function processPdf(file, type) {
   toast('Lendo PDF…');
   try {
@@ -3311,15 +3342,40 @@ async function processPdf(file, type) {
       // Validação de CNPJ: NF deve pertencer à filial da programação
       const cnpjCheck = validateNfCnpj(text, ctx.progId);
       if (!cnpjCheck.ok) {
-        // Se não encontrou nenhum CNPJ no PDF (ex: PDF escaneado), não bloqueia
         const noCnpjFound = !cnpjCheck.cnpj || cnpjCheck.cnpj === '?';
         if (!noCnpjFound) {
           hideLoading();
-          const proceed = confirm(
-            '⚠️ ATENÇÃO — NF de filial incorreta!\n\n' + cnpjCheck.msg +
-            '\n\nDeseja prosseguir mesmo assim?'
-          );
-          if (!proceed) return;
+          const isMaster = currentUser?.role === 'master';
+          if (isMaster) {
+            const proceed = confirm(
+              '⚠️ ATENÇÃO — NF de filial incorreta!\n\n' + cnpjCheck.msg +
+              '\n\n[MASTER] Deseja prosseguir mesmo assim?'
+            );
+            if (!proceed) return;
+          } else {
+            alert('❌ NF BLOQUEADA — Filial incorreta!\n\n' + cnpjCheck.msg +
+              '\n\nEsta NF não pode ser lançada nesta programação.\nContate o Master se precisar de ajuda.');
+            return;
+          }
+        }
+      }
+
+      // Validação de data: NF emitida deve ser próxima da data da programação (±15 dias)
+      const dataNF   = extractDataNF(text);
+      const prog     = ProgAPI.list().find(p => p.id === ctx.progId);
+      if (dataNF && prog?.data) {
+        const diffDias = Math.abs((new Date(dataNF) - new Date(prog.data)) / 86400000);
+        if (diffDias > 15) {
+          hideLoading();
+          const isMaster = currentUser?.role === 'master';
+          const msgData  = `Data da NF: ${dataNF}\nData da Programação: ${prog.data}\nDiferença: ${Math.round(diffDias)} dias`;
+          if (isMaster) {
+            const proceed = confirm(`⚠️ ATENÇÃO — Data da NF distante da programação!\n\n${msgData}\n\n[MASTER] Deseja prosseguir mesmo assim?`);
+            if (!proceed) return;
+          } else {
+            alert(`❌ NF BLOQUEADA — Data incompatível!\n\n${msgData}\n\nVerifique se a NF pertence a esta programação.\nContate o Master se precisar de ajuda.`);
+            return;
+          }
         }
       }
       
@@ -4172,6 +4228,34 @@ async function processBatchTerminal(files) {
       row._text        = text;
       row._file        = file;
 
+      // ── VALIDAÇÃO DE FILIAL: CNPJ da NF deve bater com a filial dos pedidos do lote ──
+      if (!row.duplicate) {
+        const cnpjsNaNF     = extractAllCnpjs(text);
+        const allFilialCnpjs = Object.values(FILIAL_CNPJ);
+        const cnpjEncontrado = cnpjsNaNF.find(c => allFilialCnpjs.includes(c));
+
+        if (cnpjEncontrado) {
+          // Descobre qual filial está na NF
+          const filialNF = Object.keys(FILIAL_CNPJ).find(k => FILIAL_CNPJ[k] === cnpjEncontrado);
+          // Verifica se bate com pelo menos um dos pedidos do lote
+          const normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+          const bateComLote = allProgs.some(p => {
+            const cnpjEsperado = getExpectedCnpj(p.id);
+            return cnpjEsperado === cnpjEncontrado;
+          });
+
+          if (!bateComLote) {
+            // Descobre qual filial os pedidos do lote esperam
+            const filialEsperada = allProgs[0] ? (
+              Object.keys(FILIAL_CNPJ).find(k => FILIAL_CNPJ[k] === getExpectedCnpj(allProgs[0].id)) || allProgs[0].usina
+            ) : '?';
+            row.status    = `❌ NF de filial incorreta — NF é de "${filialNF?.split('/')[1]?.trim()||filialNF||'?'}" mas pedido é de "${filialEsperada?.split('/')[1]?.trim()||filialEsperada||'?'}"`;
+            row.vagaoIdx  = -1;
+            row.filialErrada = true;
+          }
+        }
+      }
+
       // ── VALIDAÇÃO: NF já existe no sistema? ──
       if (row.nfNum) {
         // Verifica em todas as programações carregadas (não só deste terminal)
@@ -4199,8 +4283,8 @@ async function processBatchTerminal(files) {
         }
       }
 
-      // ── MATCHING — só executa se não for duplicata ──
-      if (!row.duplicate) {
+      // ── MATCHING — só executa se não for duplicata e filial correta ──
+      if (!row.duplicate && !row.filialErrada) {
 
       // Prioridade 1: Vagão já registrado (placa bate exatamente)
       if (row.vagaoNum) {
@@ -4875,6 +4959,26 @@ async function nlProcessAll() {
           }
         }
         if (!row.duplicate) {
+          // ── VALIDAÇÃO DE FILIAL: CNPJ da NF Inpasa deve bater com a filial dos pedidos do modal ──
+          const cnpjsNF       = extractAllCnpjs(text);
+          const allFilialCnpjs = Object.values(FILIAL_CNPJ);
+          const cnpjNF         = cnpjsNF.find(c => allFilialCnpjs.includes(c));
+
+          if (cnpjNF) {
+            const bateComModal = progsToSearch.some(p => getExpectedCnpj(p.id) === cnpjNF);
+            if (!bateComModal) {
+              const filialNF     = Object.keys(FILIAL_CNPJ).find(k => FILIAL_CNPJ[k] === cnpjNF);
+              const filialModal  = progsToSearch[0] ? (
+                Object.keys(FILIAL_CNPJ).find(k => FILIAL_CNPJ[k] === getExpectedCnpj(progsToSearch[0].id)) || progsToSearch[0].usina
+              ) : '?';
+              row.status    = `❌ NF Inpasa de filial incorreta — NF é de "${filialNF?.split('/')[1]?.trim()||filialNF||'?'}" mas programação é de "${filialModal?.split('/')[1]?.trim()||filialModal||'?'}"`;
+              row.vagaoIdx  = -1;
+              row.filialErrada = true;
+            }
+          }
+        }
+
+        if (!row.duplicate && !row.filialErrada) {
           // REGRA: NF Inpasa só vai em vagão que JÁ TEM nfRetorno preenchida
           //        e ainda NÃO tem nfInpasa — dentro da data/terminal do modal
 
